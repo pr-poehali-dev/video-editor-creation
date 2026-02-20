@@ -361,6 +361,60 @@ def handler(event, context):
 
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True, 'is_active': row[0] if row else False})}
 
+        elif path == '/promos/delete' and method == 'POST':
+            user = get_user_by_token(conn, token)
+            if not user or user['role'] != 'admin':
+                conn.close()
+                return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Нет доступа'})}
+
+            promo_id = body.get('id')
+            if not promo_id:
+                conn.close()
+                return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'id обязателен'})}
+
+            cur = conn.cursor()
+            cur.execute("DELETE FROM promo_usages WHERE promo_id = %s", (promo_id,))
+            cur.execute("DELETE FROM promo_codes WHERE id = %s", (promo_id,))
+            conn.commit()
+            cur.close()
+            conn.close()
+
+            return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True})}
+
+        elif path == '/promos/update' and method == 'POST':
+            user = get_user_by_token(conn, token)
+            if not user or user['role'] != 'admin':
+                conn.close()
+                return {'statusCode': 403, 'headers': CORS, 'body': json.dumps({'error': 'Нет доступа'})}
+
+            promo_id = body.get('id')
+            if not promo_id:
+                conn.close()
+                return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'id обязателен'})}
+
+            fields = []
+            values = []
+            for key in ['code', 'discount_type', 'discount_value', 'max_uses', 'applies_to', 'expires_at', 'min_purchase']:
+                if key in body:
+                    val = body[key]
+                    if key == 'code':
+                        val = val.upper().strip()
+                    fields.append(f"{key} = %s")
+                    values.append(val)
+
+            if not fields:
+                conn.close()
+                return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Нет полей для обновления'})}
+
+            values.append(promo_id)
+            cur = conn.cursor()
+            cur.execute(f"UPDATE promo_codes SET {', '.join(fields)} WHERE id = %s", tuple(values))
+            conn.commit()
+            cur.close()
+            conn.close()
+
+            return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True})}
+
         else:
             conn.close()
             return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Маршрут не найден'})}

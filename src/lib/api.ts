@@ -79,6 +79,10 @@ export const shop = {
     request(urls.shop, '/promos', { method: 'POST', body: JSON.stringify(data) }),
   togglePromo: (id: number) =>
     request(urls.shop, '/promos/toggle', { method: 'POST', body: JSON.stringify({ id }) }),
+  deletePromo: (id: number) =>
+    request(urls.shop, '/promos/delete', { method: 'POST', body: JSON.stringify({ id }) }),
+  updatePromo: (data: { id: number; code?: string; discount_type?: string; discount_value?: number; max_uses?: number | null; applies_to?: string; expires_at?: string | null; min_purchase?: number }) =>
+    request(urls.shop, '/promos/update', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 export default { auth, wallet, projects, admin, shop };
