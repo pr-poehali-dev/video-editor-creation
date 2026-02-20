@@ -4,7 +4,8 @@ import psycopg2
 from datetime import datetime
 
 def get_db():
-    return psycopg2.connect(os.environ['DATABASE_URL'])
+    schema = os.environ.get('MAIN_DB_SCHEMA', 'public')
+    return psycopg2.connect(os.environ['DATABASE_URL'], options=f'-c search_path={schema}')
 
 def get_user_by_token(conn, token):
     if not token:
