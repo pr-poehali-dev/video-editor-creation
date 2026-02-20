@@ -76,7 +76,7 @@ const typeColor = (type: string) => {
 };
 
 const MediaPanel = () => {
-  const { assets, addAsset, removeAsset, activePanel, setActivePanel } = useEditorStore();
+  const { assets, addAsset, removeAsset, activePanel, setActivePanel, setDraggingAsset } = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImport = useCallback(() => {
@@ -127,7 +127,7 @@ const MediaPanel = () => {
           <ScrollArea className="flex-1 px-2 editor-scrollbar">
             <div className="grid grid-cols-2 gap-1.5 pb-2">
               {assets.map(asset => (
-                <div key={asset.id} className="group relative bg-secondary/50 rounded p-1.5 cursor-grab hover:bg-secondary transition-colors" draggable>
+                <div key={asset.id} className="group relative bg-secondary/50 rounded p-1.5 cursor-grab hover:bg-secondary transition-colors active:cursor-grabbing" draggable onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify(asset)); e.dataTransfer.effectAllowed = 'copy'; setDraggingAsset(asset); }} onDragEnd={() => setDraggingAsset(null)}>
                   <div className="aspect-video rounded flex items-center justify-center mb-1" style={{ background: 'hsl(var(--editor-bg))' }}>
                     <Icon name={typeIcon(asset.type)} size={20} className={typeColor(asset.type)} />
                   </div>
