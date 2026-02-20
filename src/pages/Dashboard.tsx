@@ -155,6 +155,10 @@ const Dashboard = () => {
               <Icon name="Wallet" size={14} className="text-green-400" />
               <span className="text-sm font-semibold">{balance.toFixed(0)} ₽</span>
             </div>
+            <button onClick={() => navigate('/shop')} className="nle-button flex items-center gap-1.5">
+              <Icon name="Store" size={12} />
+              <span>Магазин</span>
+            </button>
             <button onClick={() => navigate('/')} className="nle-button flex items-center gap-1.5">
               <Icon name="Clapperboard" size={12} />
               <span>Редактор</span>

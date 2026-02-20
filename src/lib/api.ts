@@ -66,4 +66,12 @@ export const admin = {
     request(urls.admin, `/transactions?limit=${limit}&offset=${offset}`),
 };
 
-export default { auth, wallet, projects, admin };
+export const shop = {
+  catalog: (category = '') =>
+    request(urls.shop, `/catalog${category ? `?category=${category}` : ''}`),
+  buy: (slug: string) =>
+    request(urls.shop, '/buy', { method: 'POST', body: JSON.stringify({ slug }) }),
+  myItems: () => request(urls.shop, '/my-items'),
+};
+
+export default { auth, wallet, projects, admin, shop };

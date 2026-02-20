@@ -103,6 +103,15 @@ const Toolbar = () => {
           </TooltipTrigger>
           <TooltipContent><p className="text-[10px]">Горячие клавиши</p></TooltipContent>
         </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button onClick={() => navigate('/shop')} className="nle-button flex items-center gap-1">
+              <Icon name="Store" size={11} />
+              <span className="text-[10px]">Магазин</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent><p className="text-[10px]">Магазин эффектов</p></TooltipContent>
+        </Tooltip>
         <Separator orientation="vertical" className="h-5 bg-border/50" />
         {isAuthenticated && user ? (
           <button onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-secondary/50 transition-colors">
