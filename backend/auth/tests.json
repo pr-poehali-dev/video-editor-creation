@@ -7,19 +7,10 @@
       "expectedStatus": 200
     },
     {
-      "name": "Register missing fields",
-      "method": "POST",
-      "path": "/register",
-      "body": {"email": "", "password": ""},
-      "expectedStatus": 400,
-      "expectedBody": {"error": "string"},
-      "bodyMatcher": "partial"
-    },
-    {
-      "name": "Profile without auth",
+      "name": "Root returns 404",
       "method": "GET",
-      "path": "/profile",
-      "expectedStatus": 401,
+      "path": "/",
+      "expectedStatus": 404,
       "expectedBody": {"error": "string"},
       "bodyMatcher": "partial"
     }

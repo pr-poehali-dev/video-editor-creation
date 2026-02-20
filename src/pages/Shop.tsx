@@ -5,6 +5,7 @@ import useAuth from '@/hooks/use-auth';
 import { shop, wallet } from '@/lib/api';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { Input } from '@/components/ui/input';
 
 interface ShopItem {
   id: number;
@@ -17,6 +18,16 @@ interface ShopItem {
   preview_url: string;
   features: string[];
   owned: boolean;
+}
+
+interface PromoResult {
+  valid: boolean;
+  code: string;
+  discount_type: string;
+  discount_value: number;
+  discount: number;
+  final_price: number;
+  original_price: number;
 }
 
 const categoryLabels: Record<string, string> = {
@@ -57,6 +68,10 @@ const Shop = () => {
   const [buying, setBuying] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ShopItem | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoResult, setPromoResult] = useState<PromoResult | null>(null);
+  const [promoError, setPromoError] = useState('');
+  const [checkingPromo, setCheckingPromo] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -67,6 +82,12 @@ const Shop = () => {
     if (user) setBalance(user.balance);
   }, [user]);
 
+  useEffect(() => {
+    setPromoCode('');
+    setPromoResult(null);
+    setPromoError('');
+  }, [selectedItem]);
+
   const loadCatalog = async () => {
     setLoading(true);
     try {
@@ -75,6 +96,20 @@ const Shop = () => {
       setCategories(data.categories || []);
     } catch {}
     setLoading(false);
+  };
+
+  const handleCheckPromo = async () => {
+    if (!promoCode.trim() || !selectedItem) return;
+    setCheckingPromo(true);
+    setPromoError('');
+    setPromoResult(null);
+    try {
+      const res = await shop.checkPromo(promoCode, selectedItem.slug);
+      setPromoResult(res);
+    } catch (e: any) {
+      setPromoError(e.error || 'Недействительный промокод');
+    }
+    setCheckingPromo(false);
   };
 
   const handleBuy = useCallback(async (item: ShopItem) => {
@@ -87,20 +122,30 @@ const Shop = () => {
     setBuying(item.slug);
     setMessage(null);
     try {
-      const res = await shop.buy(item.slug);
+      const code = promoResult?.valid ? promoResult.code : '';
+      const res = await shop.buy(item.slug, code);
       setBalance(res.balance);
       setItems(prev => prev.map(i => i.slug === item.slug ? { ...i, owned: true } : i));
-      setMessage({ type: 'success', text: `${item.name} приобретён!` });
+      let msg = `${item.name} приобретён!`;
+      if (res.discount > 0) msg += ` Скидка: ${res.discount.toFixed(0)} ₽`;
+      setMessage({ type: 'success', text: msg });
       setSelectedItem(null);
     } catch (e: any) {
       setMessage({ type: 'error', text: e.error || 'Ошибка покупки' });
     }
     setBuying(null);
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, promoResult]);
 
   const filteredItems = activeCategory
     ? items.filter(i => i.category === activeCategory)
     : items;
+
+  const getFinalPrice = (item: ShopItem) => {
+    if (promoResult?.valid && selectedItem?.slug === item.slug) {
+      return promoResult.final_price;
+    }
+    return item.price;
+  };
 
   return (
     <div className="min-h-screen" style={{ background: 'hsl(var(--editor-bg))' }}>
@@ -215,15 +260,10 @@ const Shop = () => {
                     )}
                     {!item.owned && (
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleBuy(item); }}
-                        disabled={buying === item.slug}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                        onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                       >
-                        {buying === item.slug ? (
-                          <Icon name="Loader2" size={12} className="animate-spin" />
-                        ) : (
-                          'Купить'
-                        )}
+                        Купить
                       </button>
                     )}
                   </div>
@@ -252,7 +292,16 @@ const Shop = () => {
                   <h2 className="text-lg font-bold">{selectedItem.name}</h2>
                 </div>
                 {!selectedItem.owned && (
-                  <span className="text-2xl font-bold">{selectedItem.price.toFixed(0)} ₽</span>
+                  <div className="text-right">
+                    {promoResult?.valid ? (
+                      <>
+                        <span className="text-sm text-muted-foreground line-through">{selectedItem.price.toFixed(0)} ₽</span>
+                        <span className="text-2xl font-bold text-green-400 ml-2">{promoResult.final_price.toFixed(0)} ₽</span>
+                      </>
+                    ) : (
+                      <span className="text-2xl font-bold">{selectedItem.price.toFixed(0)} ₽</span>
+                    )}
+                  </div>
                 )}
               </div>
               <p className="text-sm text-muted-foreground mb-4">{selectedItem.description}</p>
@@ -268,6 +317,47 @@ const Shop = () => {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {!selectedItem.owned && isAuthenticated && (
+                <div className="mb-4">
+                  <label className="text-xs text-muted-foreground mb-1.5 block">Промокод</label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={promoCode}
+                      onChange={e => { setPromoCode(e.target.value.toUpperCase()); setPromoResult(null); setPromoError(''); }}
+                      placeholder="Введите промокод"
+                      className="bg-secondary/50 border-border text-sm uppercase"
+                      onKeyDown={e => e.key === 'Enter' && handleCheckPromo()}
+                    />
+                    <button
+                      onClick={handleCheckPromo}
+                      disabled={!promoCode.trim() || checkingPromo}
+                      className="nle-button active px-4 whitespace-nowrap disabled:opacity-50"
+                    >
+                      {checkingPromo ? (
+                        <Icon name="Loader2" size={12} className="animate-spin" />
+                      ) : (
+                        'Применить'
+                      )}
+                    </button>
+                  </div>
+                  {promoResult?.valid && (
+                    <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg bg-green-500/10 text-green-400 text-xs">
+                      <Icon name="Tag" size={14} />
+                      <span>
+                        Скидка {promoResult.discount_type === 'percent' ? `${promoResult.discount_value}%` : `${promoResult.discount_value.toFixed(0)} ₽`}
+                        {' '}— вы экономите {promoResult.discount.toFixed(0)} ₽
+                      </span>
+                    </div>
+                  )}
+                  {promoError && (
+                    <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg bg-destructive/10 text-destructive text-xs">
+                      <Icon name="AlertCircle" size={14} />
+                      {promoError}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -288,11 +378,11 @@ const Shop = () => {
                       </>
                     ) : (
                       <>
-                        <Icon name="ShoppingBag" size={16} /> Купить за {selectedItem.price.toFixed(0)} ₽
+                        <Icon name="ShoppingBag" size={16} /> Купить за {getFinalPrice(selectedItem).toFixed(0)} ₽
                       </>
                     )}
                   </button>
-                  {isAuthenticated && balance < selectedItem.price && (
+                  {isAuthenticated && balance < getFinalPrice(selectedItem) && (
                     <button
                       onClick={() => navigate('/dashboard')}
                       className="px-4 py-3 rounded-lg font-medium text-xs bg-secondary text-secondary-foreground hover:bg-secondary/80 transition-colors"
@@ -302,9 +392,9 @@ const Shop = () => {
                   )}
                 </div>
               )}
-              {isAuthenticated && !selectedItem.owned && balance < selectedItem.price && (
+              {isAuthenticated && !selectedItem.owned && balance < getFinalPrice(selectedItem) && (
                 <p className="text-[11px] text-destructive mt-2 text-center">
-                  Не хватает {(selectedItem.price - balance).toFixed(0)} ₽. Пополните кошелёк.
+                  Не хватает {(getFinalPrice(selectedItem) - balance).toFixed(0)} ₽. Пополните кошелёк.
                 </p>
               )}
             </div>

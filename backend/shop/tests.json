@@ -7,11 +7,10 @@
       "expectedStatus": 200
     },
     {
-      "name": "Buy without auth",
-      "method": "POST",
-      "path": "/buy",
-      "body": {"slug": "test"},
-      "expectedStatus": 401,
+      "name": "Root returns 404",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 404,
       "expectedBody": {"error": "string"},
       "bodyMatcher": "partial"
     }

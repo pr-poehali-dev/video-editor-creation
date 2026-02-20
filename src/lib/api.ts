@@ -69,9 +69,16 @@ export const admin = {
 export const shop = {
   catalog: (category = '') =>
     request(urls.shop, `/catalog${category ? `?category=${category}` : ''}`),
-  buy: (slug: string) =>
-    request(urls.shop, '/buy', { method: 'POST', body: JSON.stringify({ slug }) }),
+  checkPromo: (code: string, slug = '') =>
+    request(urls.shop, '/check-promo', { method: 'POST', body: JSON.stringify({ code, slug }) }),
+  buy: (slug: string, promo_code = '') =>
+    request(urls.shop, '/buy', { method: 'POST', body: JSON.stringify({ slug, promo_code }) }),
   myItems: () => request(urls.shop, '/my-items'),
+  promos: () => request(urls.shop, '/promos'),
+  createPromo: (data: { code: string; discount_type: string; discount_value: number; max_uses?: number; applies_to?: string; expires_at?: string }) =>
+    request(urls.shop, '/promos', { method: 'POST', body: JSON.stringify(data) }),
+  togglePromo: (id: number) =>
+    request(urls.shop, '/promos/toggle', { method: 'POST', body: JSON.stringify({ id }) }),
 };
 
 export default { auth, wallet, projects, admin, shop };
