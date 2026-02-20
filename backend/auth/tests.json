@@ -1,0 +1,27 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Register missing fields",
+      "method": "POST",
+      "path": "/register",
+      "body": {"email": "", "password": ""},
+      "expectedStatus": 400,
+      "expectedBody": {"error": "string"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Profile without auth",
+      "method": "GET",
+      "path": "/profile",
+      "expectedStatus": 401,
+      "expectedBody": {"error": "string"},
+      "bodyMatcher": "partial"
+    }
+  ]
+}

@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
+import useAuth from '@/hooks/use-auth';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 
@@ -15,8 +17,12 @@ const tools = [
 
 const Toolbar = () => {
   const { project, isPlaying, togglePlay } = useEditorStore();
+  const { user, isAuthenticated, loadProfile } = useAuth();
+  const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState('select');
   const [showProjectMenu, setShowProjectMenu] = useState(false);
+
+  useEffect(() => { loadProfile(); }, []);
 
   return (
     <div className="h-10 flex items-center justify-between px-3 border-b border-border" style={{ background: 'hsl(var(--editor-panel))' }}>
@@ -97,6 +103,20 @@ const Toolbar = () => {
           </TooltipTrigger>
           <TooltipContent><p className="text-[10px]">Горячие клавиши</p></TooltipContent>
         </Tooltip>
+        <Separator orientation="vertical" className="h-5 bg-border/50" />
+        {isAuthenticated && user ? (
+          <button onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-secondary/50 transition-colors">
+            <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
+              <span className="text-[9px] font-bold text-primary">{user.name.charAt(0).toUpperCase()}</span>
+            </div>
+            <span className="text-[10px]">{user.name}</span>
+          </button>
+        ) : (
+          <button onClick={() => navigate('/auth')} className="nle-button active flex items-center gap-1">
+            <Icon name="LogIn" size={11} />
+            <span className="text-[10px]">Войти</span>
+          </button>
+        )}
       </div>
     </div>
   );
