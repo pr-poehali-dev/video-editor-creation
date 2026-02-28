@@ -89,6 +89,7 @@ def handler(event, context):
             email = body.get('email', '').strip().lower()
             password = body.get('password', '')
             name = body.get('name', '').strip()
+            print(f"[REGISTER] email={email}, name={name}, pass_len={len(password)}")
 
             if not email or not password:
                 return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Email и пароль обязательны'})}
@@ -189,4 +190,7 @@ def handler(event, context):
             return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Маршрут не найден'})}
 
     except Exception as e:
+        import traceback
+        print(f"[AUTH ERROR] {str(e)}")
+        traceback.print_exc()
         return {'statusCode': 500, 'headers': CORS, 'body': json.dumps({'error': str(e)})}
