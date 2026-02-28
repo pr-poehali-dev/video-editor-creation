@@ -89,7 +89,8 @@ def handler(event, context):
             conn.close()
 
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({
-                'id': row[0], 'name': name, 'created_at': str(row[1]), 'message': 'Проект создан'
+                'project': {'id': row[0], 'name': name, 'created_at': str(row[1])},
+                'message': 'Проект создан'
             })}
 
         elif path == '/get' and method == 'GET':
@@ -111,10 +112,19 @@ def handler(event, context):
             if not row:
                 return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Проект не найден'})}
 
+            project_data = row[4]
+            if isinstance(project_data, str):
+                try:
+                    project_data = json.loads(project_data)
+                except:
+                    project_data = {}
+
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({
-                'id': row[0], 'name': row[1], 'description': row[2],
-                'thumbnail_url': row[3], 'project_data': row[4],
-                'is_public': row[5], 'created_at': str(row[6]), 'updated_at': str(row[7])
+                'project': {
+                    'id': row[0], 'name': row[1], 'description': row[2],
+                    'thumbnail_url': row[3], 'project_data': project_data,
+                    'is_public': row[5], 'created_at': str(row[6]), 'updated_at': str(row[7])
+                }
             })}
 
         elif path == '/save' and method == 'PUT':

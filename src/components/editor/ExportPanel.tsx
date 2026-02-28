@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -26,28 +26,92 @@ const qualities = [
 const resolutions = ['640x360', '1280x720', '1920x1080', '2560x1440', '3840x2160'];
 
 const ExportPanel = () => {
-  const { exportSettings, setExportSettings, project } = useEditorStore();
+  const { exportSettings, setExportSettings, project, tracks, assets } = useEditorStore();
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportDone, setExportDone] = useState(false);
+  const [exportedFiles, setExportedFiles] = useState<Array<{ name: string; url: string }>>([]);
 
-  const handleExport = () => {
+  const collectMediaUrls = useCallback(() => {
+    const usedAssetIds = new Set<string>();
+    tracks.forEach(t => t.clips.forEach(c => {
+      if (c.assetId) usedAssetIds.add(c.assetId);
+    }));
+
+    const files: Array<{ name: string; url: string }> = [];
+    assets.forEach(a => {
+      if (a.url && usedAssetIds.has(a.id)) {
+        files.push({ name: a.name, url: a.url });
+      }
+    });
+    return files;
+  }, [tracks, assets]);
+
+  const handleExport = useCallback(() => {
     setIsExporting(true);
     setExportProgress(0);
     setExportDone(false);
+    setExportedFiles([]);
+
+    const files = collectMediaUrls();
+    let progress = 0;
 
     const interval = setInterval(() => {
-      setExportProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsExporting(false);
-          setExportDone(true);
-          return 100;
-        }
-        return prev + Math.random() * 3 + 1;
-      });
-    }, 200);
-  };
+      progress += Math.random() * 8 + 4;
+      if (progress >= 100) {
+        clearInterval(interval);
+        setExportProgress(100);
+        setIsExporting(false);
+        setExportDone(true);
+        setExportedFiles(files);
+      } else {
+        setExportProgress(progress);
+      }
+    }, 150);
+  }, [collectMediaUrls]);
+
+  const downloadFile = useCallback(async (url: string, name: string) => {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      window.open(url, '_blank');
+    }
+  }, []);
+
+  const downloadAll = useCallback(async () => {
+    for (const f of exportedFiles) {
+      await downloadFile(f.url, f.name);
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }, [exportedFiles, downloadFile]);
+
+  const downloadProjectJson = useCallback(() => {
+    const data = useEditorStore.getState();
+    const exportData = {
+      project: data.project,
+      tracks: data.tracks,
+      assets: data.assets.map(a => ({ ...a, url: a.url.startsWith('blob:') ? '' : a.url })),
+      exportSettings: data.exportSettings,
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${data.project.name || 'project'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, []);
 
   return (
     <div className="flex flex-col h-full editor-panel rounded-lg overflow-hidden">
@@ -68,8 +132,9 @@ const ExportPanel = () => {
           <Separator className="bg-border/50" />
 
           <div>
+            { }
             <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Формат</Label>
-            <Select value={exportSettings.format} onValueChange={v => setExportSettings({ format: v as any })}>
+            <Select value={exportSettings.format} onValueChange={(v: string) => setExportSettings({ format: v as 'mp4' | 'webm' | 'mov' | 'avi' | 'gif' })}>
               <SelectTrigger className="mt-1 h-8 text-xs bg-secondary/50 border-border">
                 <SelectValue />
               </SelectTrigger>
@@ -92,7 +157,7 @@ const ExportPanel = () => {
               {qualities.map(q => (
                 <button
                   key={q.value}
-                  onClick={() => setExportSettings({ quality: q.value as any })}
+                  onClick={() => setExportSettings({ quality: q.value as 'low' | 'medium' | 'high' | 'ultra' })}
                   className={`p-2 rounded text-left transition-colors ${exportSettings.quality === q.value ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 hover:bg-secondary'}`}
                 >
                   <div className="text-xs font-medium">{q.label}</div>
@@ -142,27 +207,56 @@ const ExportPanel = () => {
           {isExporting ? (
             <div className="space-y-2">
               <div className="flex justify-between text-xs">
-                <span>Экспорт...</span>
+                <span>Подготовка файлов...</span>
                 <span>{Math.min(100, Math.round(exportProgress))}%</span>
               </div>
               <Progress value={Math.min(100, exportProgress)} className="h-2" />
-              <p className="text-[10px] text-muted-foreground text-center">Рендеринг видео, пожалуйста подождите</p>
+              <p className="text-[10px] text-muted-foreground text-center">Подготовка медиафайлов к скачиванию</p>
             </div>
           ) : exportDone ? (
-            <div className="text-center space-y-2">
+            <div className="space-y-2">
               <div className="w-10 h-10 mx-auto rounded-full bg-green-500/20 flex items-center justify-center">
                 <Icon name="Check" size={20} className="text-green-400" />
               </div>
-              <p className="text-xs font-medium">Экспорт завершён!</p>
-              <button onClick={() => setExportDone(false)} className="nle-button active w-full py-2">
-                <Icon name="Download" size={12} className="inline mr-1" /> Скачать файл
+              <p className="text-xs font-medium text-center">Готово к скачиванию!</p>
+
+              {exportedFiles.length > 0 ? (
+                <div className="space-y-1">
+                  {exportedFiles.map((f, i) => (
+                    <button
+                      key={i}
+                      onClick={() => downloadFile(f.url, f.name)}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-secondary/50 transition-colors text-left"
+                    >
+                      <Icon name="FileDown" size={12} className="text-primary flex-shrink-0" />
+                      <span className="truncate">{f.name}</span>
+                    </button>
+                  ))}
+                  <Separator className="bg-border/30" />
+                  <button onClick={downloadAll} className="nle-button active w-full py-2">
+                    <Icon name="Download" size={12} className="inline mr-1" /> Скачать все файлы
+                  </button>
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground text-center">
+                  Нет медиафайлов на таймлайне. Добавьте файлы и перетяните их на дорожки.
+                </p>
+              )}
+
+              <button onClick={() => setExportDone(false)} className="nle-button w-full py-1.5 text-[10px]">
+                Назад к настройкам
               </button>
             </div>
           ) : (
-            <button onClick={handleExport} className="w-full py-2.5 rounded font-medium text-sm transition-colors bg-primary text-primary-foreground hover:bg-primary/90">
-              <Icon name="Rocket" size={14} className="inline mr-1.5" />
-              Начать экспорт
-            </button>
+            <div className="space-y-2">
+              <button onClick={handleExport} className="w-full py-2.5 rounded font-medium text-sm transition-colors bg-primary text-primary-foreground hover:bg-primary/90">
+                <Icon name="Rocket" size={14} className="inline mr-1.5" />
+                Экспорт медиафайлов
+              </button>
+              <button onClick={downloadProjectJson} className="nle-button w-full py-2 text-[10px]">
+                <Icon name="FileJson" size={12} className="inline mr-1" /> Скачать проект (.json)
+              </button>
+            </div>
           )}
         </div>
       </ScrollArea>

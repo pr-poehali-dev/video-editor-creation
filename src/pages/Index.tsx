@@ -23,6 +23,8 @@ const Index = () => {
   const project = useEditorStore(s => s.project);
   const loadedRef = useRef<string | undefined>(undefined);
 
+  const loadProjectData = useEditorStore(s => s.loadProjectData);
+
   useEffect(() => {
     const pid = projectId ? parseInt(projectId) : undefined;
     if (loadedRef.current === projectId) return;
@@ -33,10 +35,16 @@ const Index = () => {
       projects.get(pid).then((res: Record<string, unknown>) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const p = res.project as any;
-        if (p) setProject({ id: pid, name: p.name || 'Проект' });
+        if (p) {
+          setProject({ id: pid, name: p.name || 'Проект' });
+          if (p.project_data && typeof p.project_data === 'object') {
+            const pd = p.project_data;
+            if (pd.tracks) loadProjectData({ tracks: pd.tracks, project: pd.project, exportSettings: pd.exportSettings });
+          }
+        }
       }).catch(() => {});
     }
-  }, [projectId, resetEditor, setProject]);
+  }, [projectId, resetEditor, setProject, loadProjectData]);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden" style={{ background: 'hsl(var(--editor-bg))' }}>

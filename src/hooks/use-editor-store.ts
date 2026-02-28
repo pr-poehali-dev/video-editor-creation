@@ -39,6 +39,8 @@ interface EditorStore extends EditorState {
   setDraggingAsset: (asset: MediaAsset | null) => void;
   setProject: (project: Partial<EditorState['project']>) => void;
   resetEditor: (projectId?: number, projectName?: string) => void;
+  getProjectData: () => { tracks: Track[]; project: EditorState['project']; exportSettings: EditorState['exportSettings'] };
+  loadProjectData: (data: { tracks?: Track[]; project?: Partial<EditorState['project']>; exportSettings?: Partial<EditorState['exportSettings']> }) => void;
 }
 
 const defaultTracks: Track[] = [
@@ -295,6 +297,21 @@ const useEditorStore = create<EditorStore>((set, get) => ({
 
   setProject: (project) => set((state) => ({
     project: { ...state.project, ...project },
+  })),
+
+  getProjectData: () => {
+    const s = get();
+    return { tracks: s.tracks, project: s.project, exportSettings: s.exportSettings };
+  },
+
+  loadProjectData: (data) => set((state) => ({
+    tracks: data.tracks || state.tracks,
+    project: { ...state.project, ...(data.project || {}) },
+    exportSettings: { ...state.exportSettings, ...(data.exportSettings || {}) },
+    currentTime: 0,
+    isPlaying: false,
+    selectedClipId: null,
+    selectedTrackId: null,
   })),
 
   resetEditor: (projectId, projectName) => set({
