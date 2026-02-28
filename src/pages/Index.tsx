@@ -21,9 +21,14 @@ const Index = () => {
   const resetEditor = useEditorStore(s => s.resetEditor);
   const setProject = useEditorStore(s => s.setProject);
   const project = useEditorStore(s => s.project);
+  const activePanel = useEditorStore(s => s.activePanel);
   const loadedRef = useRef<string | undefined>(undefined);
 
   const loadProjectData = useEditorStore(s => s.loadProjectData);
+
+  useEffect(() => {
+    if (activePanel === 'export') setRightPanel('export');
+  }, [activePanel]);
 
   useEffect(() => {
     const pid = projectId ? parseInt(projectId) : undefined;

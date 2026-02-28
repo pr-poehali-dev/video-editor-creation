@@ -2,48 +2,42 @@ import { useRef, useCallback, useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
 import useAuth from '@/hooks/use-auth';
-import { media as mediaApi } from '@/lib/api';
+import { media as mediaApi, shop } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
-const effects = [
+interface ShopPurchase {
+  slug: string;
+  name: string;
+  category: string;
+  icon: string;
+  features: string[];
+  purchased_at: string;
+}
+
+const baseEffects = [
   { category: 'Цветокоррекция', items: [
-    { name: 'Яркость', icon: 'Sun' },
-    { name: 'Контраст', icon: 'Contrast' },
-    { name: 'Насыщенность', icon: 'Palette' },
-    { name: 'Температура', icon: 'Thermometer' },
-    { name: 'Кривые', icon: 'TrendingUp' },
+    { name: 'Яркость', icon: 'Sun', free: true },
+    { name: 'Контраст', icon: 'Contrast', free: true },
+    { name: 'Насыщенность', icon: 'Palette', free: true },
   ]},
   { category: 'Стилизация', items: [
-    { name: 'Размытие', icon: 'Droplets' },
-    { name: 'Резкость', icon: 'Diamond' },
-    { name: 'Виньетка', icon: 'Circle' },
-    { name: 'Шум', icon: 'Sparkles' },
-    { name: 'Глитч', icon: 'Zap' },
-  ]},
-  { category: 'Хромакей', items: [
-    { name: 'Зелёный экран', icon: 'SquareStack' },
-    { name: 'Синий экран', icon: 'SquareStack' },
+    { name: 'Размытие', icon: 'Droplets', free: true },
+    { name: 'Виньетка', icon: 'Circle', free: true },
   ]},
 ];
 
-const transitions = [
-  { name: 'Растворение', icon: 'Blend', duration: '0.5с' },
-  { name: 'Слайд влево', icon: 'ArrowLeft', duration: '0.5с' },
-  { name: 'Слайд вправо', icon: 'ArrowRight', duration: '0.5с' },
-  { name: 'Масштаб', icon: 'ZoomIn', duration: '0.7с' },
-  { name: 'Поворот', icon: 'RotateCw', duration: '0.6с' },
-  { name: 'Вспышка', icon: 'Flashlight', duration: '0.3с' },
-  { name: 'Размытие', icon: 'Droplets', duration: '0.5с' },
-  { name: 'Пикселизация', icon: 'Grid3x3', duration: '0.4с' },
+const baseTransitions = [
+  { name: 'Растворение', icon: 'Blend', duration: '0.5с', free: true },
+  { name: 'Слайд влево', icon: 'ArrowLeft', duration: '0.5с', free: true },
+  { name: 'Слайд вправо', icon: 'ArrowRight', duration: '0.5с', free: true },
+  { name: 'Масштаб', icon: 'ZoomIn', duration: '0.7с', free: true },
 ];
 
-const textPresets = [
-  { name: 'Заголовок', icon: 'Type', desc: 'Крупный текст по центру' },
-  { name: 'Субтитры', icon: 'Subtitles', desc: 'Текст внизу экрана' },
-  { name: 'Нижняя третья', icon: 'PanelBottom', desc: 'Плашка с именем' },
-  { name: 'Титры', icon: 'ScrollText', desc: 'Прокручиваемый текст' },
-  { name: 'Выноска', icon: 'MessageSquare', desc: 'Текст с указателем' },
+const baseTextPresets = [
+  { name: 'Заголовок', icon: 'Type', desc: 'Крупный текст по центру', free: true },
+  { name: 'Субтитры', icon: 'Subtitles', desc: 'Текст внизу экрана', free: true },
+  { name: 'Нижняя третья', icon: 'PanelBottom', desc: 'Плашка с именем', free: true },
 ];
 
 const formatSize = (bytes: number): string => {
@@ -112,12 +106,14 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 const MediaPanel = () => {
-  const { assets, addAsset, removeAsset, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime, project } = useEditorStore();
+  const { assets, addAsset, removeAsset, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime, project, addClip, selectedClipId, updateClip } = useEditorStore();
   const { isAuthenticated } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploading, setUploading] = useState<string[]>([]);
   const [loadedProjectId, setLoadedProjectId] = useState<number | null>(null);
+  const [purchases, setPurchases] = useState<ShopPurchase[]>([]);
+  const [purchasesLoaded, setPurchasesLoaded] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || !project.id) return;
@@ -149,6 +145,24 @@ const MediaPanel = () => {
       setLoadedProjectId(project.id!);
     }).catch(() => setLoadedProjectId(project.id!));
   }, [isAuthenticated, project.id, loadedProjectId, addAsset]);
+
+  useEffect(() => {
+    if (!isAuthenticated || purchasesLoaded) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    shop.myItems().then((data: any) => {
+      if (data.items) {
+        setPurchases(data.items.map((i: ShopPurchase) => ({
+          slug: i.slug,
+          name: i.name,
+          category: i.category,
+          icon: i.icon,
+          features: i.features || [],
+          purchased_at: i.purchased_at,
+        })));
+      }
+      setPurchasesLoaded(true);
+    }).catch(() => setPurchasesLoaded(true));
+  }, [isAuthenticated, purchasesLoaded]);
 
   const handleImport = useCallback(() => {
     fileInputRef.current?.click();
@@ -230,6 +244,64 @@ const MediaPanel = () => {
     removeAsset(assetId);
   }, [removeAsset]);
 
+  const handleApplyEffect = useCallback((effectName: string) => {
+    if (!selectedClipId) return;
+    const state = useEditorStore.getState();
+    let clip = null;
+    for (const t of state.tracks) {
+      clip = t.clips.find(c => c.id === selectedClipId);
+      if (clip) break;
+    }
+    if (!clip) return;
+
+    const existingFilters = clip.filters || [];
+    const alreadyHas = existingFilters.some(f => f.name === effectName);
+    if (alreadyHas) return;
+
+    updateClip(selectedClipId, {
+      filters: [...existingFilters, {
+        id: `filter_${Date.now()}`,
+        name: effectName,
+        type: effectName.toLowerCase(),
+        params: { intensity: 50 },
+      }],
+    });
+  }, [selectedClipId, updateClip]);
+
+  const handleApplyTransition = useCallback((transitionName: string, duration: number) => {
+    if (!selectedClipId) return;
+    updateClip(selectedClipId, {
+      transition: { type: transitionName.toLowerCase(), duration },
+    });
+  }, [selectedClipId, updateClip]);
+
+  const handleAddText = useCallback((presetName: string) => {
+    const trackId = getCompatibleTrack('text');
+    const textDefaults: Record<string, { text: string; fontSize: number }> = {
+      'Заголовок': { text: 'Заголовок', fontSize: 72 },
+      'Субтитры': { text: 'Субтитры', fontSize: 24 },
+      'Нижняя третья': { text: 'Имя автора', fontSize: 28 },
+      'Титры': { text: 'Титры', fontSize: 36 },
+      'Выноска': { text: 'Примечание', fontSize: 18 },
+    };
+    const defaults = textDefaults[presetName] || { text: presetName, fontSize: 36 };
+    addClip(trackId, {
+      type: 'text',
+      startTime: currentTime,
+      duration: 5,
+      name: presetName,
+      text: defaults.text,
+      fontSize: defaults.fontSize,
+      fontColor: '#ffffff',
+    });
+  }, [getCompatibleTrack, addClip, currentTime]);
+
+  const purchasedEffects = purchases.filter(p => p.category === 'effects');
+  const purchasedTransitions = purchases.filter(p => p.category === 'transitions');
+  const purchasedTitles = purchases.filter(p => p.category === 'titles');
+  const purchasedAudio = purchases.filter(p => p.category === 'audio');
+  const purchasedFeatures = purchases.filter(p => p.category === 'features');
+
   return (
     <div className="flex flex-col h-full editor-panel rounded-lg overflow-hidden">
       <Tabs defaultValue="media" className="flex flex-col h-full">
@@ -290,27 +362,103 @@ const MediaPanel = () => {
 
         <TabsContent value="effects" className="flex-1 m-0 min-h-0">
           <ScrollArea className="h-full px-2 py-1 editor-scrollbar">
-            {effects.map(group => (
+            {!selectedClipId && (
+              <div className="text-[10px] text-muted-foreground text-center py-3 px-2">
+                Выделите клип на таймлайне, чтобы применить эффект
+              </div>
+            )}
+
+            {baseEffects.map(group => (
               <div key={group.category} className="mb-3">
                 <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-1">{group.category}</div>
                 <div className="space-y-0.5">
                   {group.items.map(item => (
-                    <div key={item.name} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-secondary/50 cursor-pointer transition-colors">
+                    <div
+                      key={item.name}
+                      onClick={() => handleApplyEffect(item.name)}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${selectedClipId ? 'hover:bg-secondary/50' : 'opacity-50 cursor-default'}`}
+                    >
                       <Icon name={item.icon} size={12} className="text-muted-foreground" />
                       <span className="text-xs">{item.name}</span>
+                      <span className="ml-auto text-[8px] text-green-400">FREE</span>
                     </div>
                   ))}
                 </div>
               </div>
             ))}
+
+            {purchasedEffects.length > 0 && (
+              <div className="mb-3">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-1 flex items-center gap-1">
+                  <Icon name="ShoppingBag" size={10} className="text-primary" /> Из магазина
+                </div>
+                <div className="space-y-0.5">
+                  {purchasedEffects.map(p => (
+                    <div key={p.slug} className="mb-2">
+                      <div
+                        onClick={() => handleApplyEffect(p.name)}
+                        className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${selectedClipId ? 'hover:bg-secondary/50' : 'opacity-50 cursor-default'}`}
+                      >
+                        <Icon name={p.icon || 'Palette'} size={12} className="text-primary" />
+                        <span className="text-xs font-medium">{p.name}</span>
+                        <span className="ml-auto text-[8px] text-primary">PRO</span>
+                      </div>
+                      {p.features.length > 0 && (
+                        <div className="pl-7 space-y-0.5">
+                          {p.features.map((f, i) => (
+                            <div
+                              key={i}
+                              onClick={() => handleApplyEffect(f)}
+                              className={`text-[10px] px-2 py-1 rounded cursor-pointer transition-colors ${selectedClipId ? 'hover:bg-secondary/30 text-muted-foreground' : 'opacity-50 cursor-default text-muted-foreground'}`}
+                            >
+                              {f}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {purchasedFeatures.length > 0 && (
+              <div className="mb-3">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-1 flex items-center gap-1">
+                  <Icon name="Cpu" size={10} className="text-yellow-400" /> Расширения
+                </div>
+                <div className="space-y-0.5">
+                  {purchasedFeatures.map(p => (
+                    <div key={p.slug} className="flex items-center gap-2 px-2 py-1.5 rounded bg-yellow-500/5">
+                      <Icon name={p.icon || 'Cpu'} size={12} className="text-yellow-400" />
+                      <div>
+                        <div className="text-xs font-medium">{p.name}</div>
+                        <div className="text-[9px] text-muted-foreground">Активировано</div>
+                      </div>
+                      <Icon name="CheckCircle" size={10} className="ml-auto text-green-400" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </ScrollArea>
         </TabsContent>
 
         <TabsContent value="transitions" className="flex-1 m-0 min-h-0">
           <ScrollArea className="h-full px-2 py-1 editor-scrollbar">
+            {!selectedClipId && (
+              <div className="text-[10px] text-muted-foreground text-center py-3 px-2">
+                Выделите клип на таймлайне, чтобы добавить переход
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-1.5">
-              {transitions.map(tr => (
-                <div key={tr.name} className="flex flex-col items-center gap-1 p-2 rounded bg-secondary/30 hover:bg-secondary/50 cursor-pointer transition-colors">
+              {baseTransitions.map(tr => (
+                <div
+                  key={tr.name}
+                  onClick={() => handleApplyTransition(tr.name, parseFloat(tr.duration))}
+                  className={`flex flex-col items-center gap-1 p-2 rounded bg-secondary/30 cursor-pointer transition-colors ${selectedClipId ? 'hover:bg-secondary/50' : 'opacity-50 cursor-default'}`}
+                >
                   <div className="w-10 h-10 rounded flex items-center justify-center" style={{ background: 'hsl(var(--editor-bg))' }}>
                     <Icon name={tr.icon} size={16} className="text-primary" />
                   </div>
@@ -319,14 +467,47 @@ const MediaPanel = () => {
                 </div>
               ))}
             </div>
+
+            {purchasedTransitions.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-1 flex items-center gap-1">
+                  <Icon name="ShoppingBag" size={10} className="text-primary" /> Из магазина
+                </div>
+                {purchasedTransitions.map(p => (
+                  <div key={p.slug} className="mb-2">
+                    <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-primary/5">
+                      <Icon name={p.icon || 'Sparkles'} size={12} className="text-primary" />
+                      <span className="text-xs font-medium">{p.name}</span>
+                      <span className="ml-auto text-[8px] text-primary">PRO</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 mt-1">
+                      {p.features.map((f, i) => (
+                        <div
+                          key={i}
+                          onClick={() => handleApplyTransition(f, 0.5)}
+                          className={`flex flex-col items-center gap-0.5 p-1.5 rounded bg-secondary/20 text-center cursor-pointer transition-colors ${selectedClipId ? 'hover:bg-secondary/40' : 'opacity-50 cursor-default'}`}
+                        >
+                          <Icon name={p.icon || 'Sparkles'} size={12} className="text-primary/60" />
+                          <span className="text-[9px]">{f}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </ScrollArea>
         </TabsContent>
 
         <TabsContent value="text" className="flex-1 m-0 min-h-0">
           <ScrollArea className="h-full px-2 py-1 editor-scrollbar">
             <div className="space-y-1.5">
-              {textPresets.map(tp => (
-                <div key={tp.name} className="flex items-center gap-2 p-2 rounded bg-secondary/30 hover:bg-secondary/50 cursor-pointer transition-colors">
+              {baseTextPresets.map(tp => (
+                <div
+                  key={tp.name}
+                  onClick={() => handleAddText(tp.name)}
+                  className="flex items-center gap-2 p-2 rounded bg-secondary/30 hover:bg-secondary/50 cursor-pointer transition-colors"
+                >
                   <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: 'hsl(var(--editor-bg))' }}>
                     <Icon name={tp.icon} size={14} className="text-purple-400" />
                   </div>
@@ -336,6 +517,53 @@ const MediaPanel = () => {
                   </div>
                 </div>
               ))}
+
+              {purchasedTitles.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-1 flex items-center gap-1">
+                    <Icon name="ShoppingBag" size={10} className="text-primary" /> Из магазина
+                  </div>
+                  {purchasedTitles.map(p => (
+                    <div key={p.slug} className="mb-2">
+                      <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-primary/5">
+                        <Icon name={p.icon || 'Type'} size={12} className="text-primary" />
+                        <span className="text-xs font-medium">{p.name}</span>
+                        <span className="ml-auto text-[8px] text-primary">PRO</span>
+                      </div>
+                      <div className="space-y-0.5 mt-1">
+                        {p.features.map((f, i) => (
+                          <div
+                            key={i}
+                            onClick={() => handleAddText(f)}
+                            className="flex items-center gap-2 p-1.5 rounded hover:bg-secondary/30 cursor-pointer transition-colors"
+                          >
+                            <Icon name="Type" size={10} className="text-purple-400/60" />
+                            <span className="text-[10px]">{f}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {purchasedAudio.length > 0 && (
+                <div className="mt-3">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-1 flex items-center gap-1">
+                    <Icon name="Music" size={10} className="text-green-400" /> Музыка (магазин)
+                  </div>
+                  {purchasedAudio.map(p => (
+                    <div key={p.slug} className="flex items-center gap-2 px-2 py-1.5 rounded bg-green-500/5">
+                      <Icon name={p.icon || 'Music'} size={12} className="text-green-400" />
+                      <div>
+                        <div className="text-xs font-medium">{p.name}</div>
+                        <div className="text-[9px] text-muted-foreground">{p.features.length} элементов</div>
+                      </div>
+                      <Icon name="CheckCircle" size={10} className="ml-auto text-green-400" />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </ScrollArea>
         </TabsContent>
