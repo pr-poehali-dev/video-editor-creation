@@ -66,7 +66,7 @@ CORS = {
 }
 
 def handler(event, context):
-    """Авторизация, регистрация и профиль пользователей VideoForge"""
+    """Авторизация, регистрация и управление профилем пользователей VideoForge"""
     if event.get('httpMethod') == 'OPTIONS':
         return {'statusCode': 200, 'headers': CORS, 'body': ''}
 
