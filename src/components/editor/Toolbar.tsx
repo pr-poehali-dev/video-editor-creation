@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
@@ -17,17 +17,29 @@ const tools = [
 ];
 
 const Toolbar = () => {
-  const { project, getProjectData } = useEditorStore();
+  const { project, getProjectData, tracks, assets } = useEditorStore();
   const { user, isAuthenticated, loadProfile } = useAuth();
   const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState('select');
   const [showProjectMenu, setShowProjectMenu] = useState(false);
+  const [showSaveMenu, setShowSaveMenu] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const saveMenuRef = useRef<HTMLDivElement>(null);
+  const projectMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadProfile(); }, []);
 
-  const handleSave = useCallback(async () => {
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (saveMenuRef.current && !saveMenuRef.current.contains(e.target as Node)) setShowSaveMenu(false);
+      if (projectMenuRef.current && !projectMenuRef.current.contains(e.target as Node)) setShowProjectMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSaveToServer = useCallback(async () => {
     if (!project.id || !isAuthenticated) return;
     setSaving(true);
     try {
@@ -47,7 +59,65 @@ const Toolbar = () => {
       console.error('Save failed:', e);
     }
     setSaving(false);
+    setShowSaveMenu(false);
   }, [project.id, isAuthenticated, getProjectData]);
+
+  const handleDownloadProject = useCallback(() => {
+    const data = getProjectData();
+    const state = useEditorStore.getState();
+    const exportData = {
+      project: data.project,
+      tracks: data.tracks,
+      assets: state.assets.map(a => ({
+        id: a.id, name: a.name, type: a.type,
+        url: a.url?.startsWith('blob:') ? '' : a.url,
+        duration: a.duration, thumbnail: a.thumbnail?.startsWith('blob:') ? '' : a.thumbnail,
+      })),
+      exportSettings: data.exportSettings,
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${data.project.name || 'project'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setShowSaveMenu(false);
+  }, [getProjectData]);
+
+  const handleDownloadMedia = useCallback(async () => {
+    const usedAssetIds = new Set<string>();
+    tracks.forEach(t => t.clips.forEach(c => {
+      if (c.assetId) usedAssetIds.add(c.assetId);
+    }));
+
+    const filesToDownload = assets.filter(a => a.url && usedAssetIds.has(a.id));
+    if (filesToDownload.length === 0) {
+      alert('Нет медиафайлов на таймлайне для скачивания');
+      return;
+    }
+
+    for (const file of filesToDownload) {
+      try {
+        const res = await fetch(file.url);
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      } catch {
+        window.open(file.url, '_blank');
+      }
+      await new Promise(r => setTimeout(r, 400));
+    }
+    setShowSaveMenu(false);
+  }, [tracks, assets]);
 
   const handleNewProject = useCallback(async () => {
     if (!isAuthenticated) {
@@ -66,17 +136,19 @@ const Toolbar = () => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        handleSave();
+        handleSaveToServer();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleSave]);
+  }, [handleSaveToServer]);
+
+  const clipCount = tracks.reduce((sum, t) => sum + t.clips.length, 0);
 
   return (
     <div className="h-10 flex items-center justify-between px-3 border-b border-border" style={{ background: 'hsl(var(--editor-panel))' }}>
       <div className="flex items-center gap-2">
-        <div className="flex items-center gap-1.5 mr-3 relative">
+        <div ref={projectMenuRef} className="flex items-center gap-1.5 mr-3 relative">
           <button onClick={() => setShowProjectMenu(!showProjectMenu)} className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-secondary/50 transition-colors">
             <div className="w-5 h-5 rounded bg-primary/20 flex items-center justify-center">
               <Icon name="Film" size={11} className="text-primary" />
@@ -89,9 +161,6 @@ const Toolbar = () => {
               <div className="p-1">
                 <button onClick={() => { navigate('/dashboard'); setShowProjectMenu(false); }} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50">
                   <Icon name="FolderOpen" size={11} /> Мои проекты
-                </button>
-                <button onClick={handleSave} disabled={!project.id || saving} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50 disabled:opacity-40">
-                  <Icon name="Save" size={11} /> {saving ? 'Сохранение...' : 'Сохранить'}
                 </button>
                 <button onClick={handleNewProject} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50">
                   <Icon name="FilePlus" size={11} /> Новый проект
@@ -118,20 +187,81 @@ const Toolbar = () => {
           </Tooltip>
         </div>
 
-        {project.id && (
-          <>
-            <Separator orientation="vertical" className="h-5 bg-border/50" />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button onClick={handleSave} disabled={saving} className="nle-button flex items-center gap-1">
-                  <Icon name={saved ? 'Check' : saving ? 'Loader2' : 'Save'} size={11} className={saving ? 'animate-spin' : saved ? 'text-green-400' : ''} />
-                  <span className="text-[10px]">{saved ? 'Сохранено' : saving ? '...' : 'Сохранить'}</span>
+        <Separator orientation="vertical" className="h-5 bg-border/50" />
+
+        <div ref={saveMenuRef} className="relative">
+          <div className="flex items-center">
+            <button
+              onClick={handleSaveToServer}
+              disabled={saving || !project.id}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-l text-xs font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Icon
+                name={saved ? 'Check' : saving ? 'Loader2' : 'Save'}
+                size={13}
+                className={saving ? 'animate-spin' : ''}
+              />
+              {saved ? 'Сохранено!' : saving ? 'Сохраняю...' : 'Сохранить'}
+            </button>
+            <button
+              onClick={() => setShowSaveMenu(!showSaveMenu)}
+              className="flex items-center px-1.5 py-1.5 rounded-r border-l border-primary-foreground/20 transition-colors bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <Icon name="ChevronDown" size={11} />
+            </button>
+          </div>
+
+          {showSaveMenu && (
+            <div className="absolute top-full left-0 mt-1 z-50 min-w-[220px] rounded-md border border-border shadow-xl" style={{ background: 'hsl(var(--popover))' }}>
+              <div className="p-1.5">
+                <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Сохранить</div>
+                <button
+                  onClick={handleSaveToServer}
+                  disabled={!project.id || !isAuthenticated || saving}
+                  className="flex items-center gap-2.5 w-full px-2 py-2 text-xs rounded hover:bg-secondary/50 disabled:opacity-40 transition-colors"
+                >
+                  <div className="w-7 h-7 rounded bg-blue-500/15 flex items-center justify-center flex-shrink-0">
+                    <Icon name="Cloud" size={14} className="text-blue-400" />
+                  </div>
+                  <div className="text-left">
+                    <div className="font-medium">В облако</div>
+                    <div className="text-[10px] text-muted-foreground">Сохранить проект на сервер</div>
+                  </div>
                 </button>
-              </TooltipTrigger>
-              <TooltipContent><p className="text-[10px]">Сохранить (Ctrl+S)</p></TooltipContent>
-            </Tooltip>
-          </>
-        )}
+
+                <div className="my-1 border-t border-border/50" />
+                <div className="px-2 py-1 text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Скачать на компьютер</div>
+
+                <button
+                  onClick={handleDownloadProject}
+                  className="flex items-center gap-2.5 w-full px-2 py-2 text-xs rounded hover:bg-secondary/50 transition-colors"
+                >
+                  <div className="w-7 h-7 rounded bg-green-500/15 flex items-center justify-center flex-shrink-0">
+                    <Icon name="FileJson" size={14} className="text-green-400" />
+                  </div>
+                  <div className="text-left">
+                    <div className="font-medium">Файл проекта (.json)</div>
+                    <div className="text-[10px] text-muted-foreground">Дорожки, настройки, структура</div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleDownloadMedia}
+                  disabled={clipCount === 0}
+                  className="flex items-center gap-2.5 w-full px-2 py-2 text-xs rounded hover:bg-secondary/50 disabled:opacity-40 transition-colors"
+                >
+                  <div className="w-7 h-7 rounded bg-purple-500/15 flex items-center justify-center flex-shrink-0">
+                    <Icon name="FolderDown" size={14} className="text-purple-400" />
+                  </div>
+                  <div className="text-left">
+                    <div className="font-medium">Медиафайлы ({clipCount})</div>
+                    <div className="text-[10px] text-muted-foreground">Скачать аудио, фото, видео</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-0.5">
