@@ -1,20 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import type { ExportSettings } from '@/types/editor';
-
-const formats = [
-  { value: 'mp4', label: 'MP4 (H.264)', desc: 'Универсальный формат' },
-  { value: 'webm', label: 'WebM (VP9)', desc: 'Для веба' },
-  { value: 'mov', label: 'MOV', desc: 'Профессиональный' },
-  { value: 'gif', label: 'GIF', desc: 'Анимация без звука' },
-];
 
 const qualities: Array<{ value: ExportSettings['quality']; label: string; desc: string }> = [
   { value: 'low', label: 'Низкое', desc: '720p' },
@@ -43,7 +35,7 @@ const ExportPanel = () => {
 
     setIsExporting(true);
     setExportProgress(0);
-    setExportStage('Загрузка движка...');
+    setExportStage('Подготовка...');
     setExportDone(false);
     setExportError('');
     setResultUrl('');
@@ -53,7 +45,7 @@ const ExportPanel = () => {
       const renderer = new VideoRenderer();
       rendererRef.current = renderer;
 
-      setExportStage('Инициализация FFmpeg...');
+      setExportStage('Инициализация...');
       await renderer.init();
 
       const result = await renderer.render(
@@ -182,7 +174,7 @@ const ExportPanel = () => {
               </div>
               <Progress value={exportProgress} className="h-2" />
               <p className="text-[10px] text-muted-foreground text-center">
-                Рендеринг выполняется в браузере с помощью FFmpeg
+                Рендеринг выполняется прямо в браузере
               </p>
               <button
                 onClick={handleCancel}
@@ -205,23 +197,12 @@ const ExportPanel = () => {
 
               <Separator className="bg-border/50" />
 
-              <div>
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Формат</Label>
-                <Select value={exportSettings.format} onValueChange={(v: string) => setExportSettings({ format: v as ExportSettings['format'] })}>
-                  <SelectTrigger className="mt-1 h-8 text-xs bg-secondary/50 border-border">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {formats.map(f => (
-                      <SelectItem key={f.value} value={f.value} className="text-xs">
-                        <div className="flex items-center justify-between w-full gap-4">
-                          <span>{f.label}</span>
-                          <span className="text-[10px] text-muted-foreground">{f.desc}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-secondary/30">
+                <Icon name="FileVideo" size={14} className="text-primary" />
+                <div>
+                  <div className="text-xs font-medium">Формат: WebM (VP9)</div>
+                  <div className="text-[9px] text-muted-foreground">Видео с аудио, совместим со всеми браузерами</div>
+                </div>
               </div>
 
               <div>

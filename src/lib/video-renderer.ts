@@ -1,10 +1,7 @@
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile } from "@ffmpeg/util";
 import type {
   Track,
   MediaAsset,
   ExportSettings,
-  TimelineClip,
 } from "@/types/editor";
 
 type ProgressCallback = (progress: number, stage: string) => void;
@@ -15,62 +12,34 @@ interface RenderResult {
   fileName: string;
 }
 
-interface QualityProfile {
-  width: number;
-  height: number;
-  crf: number;
-}
-
-interface FormatProfile {
-  videoCodec: string;
-  audioCodec: string | null;
-  extension: string;
-}
-
-const QUALITY_MAP: Record<ExportSettings["quality"], QualityProfile> = {
-  low: { width: 1280, height: 720, crf: 28 },
-  medium: { width: 1920, height: 1080, crf: 23 },
-  high: { width: 1920, height: 1080, crf: 18 },
-  ultra: { width: 3840, height: 2160, crf: 15 },
+const QUALITY_MAP: Record<ExportSettings["quality"], { width: number; height: number; bitrate: number }> = {
+  low: { width: 1280, height: 720, bitrate: 2_000_000 },
+  medium: { width: 1920, height: 1080, bitrate: 5_000_000 },
+  high: { width: 1920, height: 1080, bitrate: 8_000_000 },
+  ultra: { width: 1920, height: 1080, bitrate: 12_000_000 },
 };
 
-const FORMAT_MAP: Record<ExportSettings["format"], FormatProfile> = {
-  mp4: { videoCodec: "libx264", audioCodec: "aac", extension: "mp4" },
-  webm: { videoCodec: "libvpx-vp9", audioCodec: "libopus", extension: "webm" },
-  avi: { videoCodec: "libx264", audioCodec: "aac", extension: "avi" },
-  mov: { videoCodec: "libx264", audioCodec: "aac", extension: "mov" },
-  gif: { videoCodec: "gif", audioCodec: null, extension: "gif" },
-};
-
-const CORE_URL =
-  "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js";
-const WASM_URL =
-  "https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm";
-
-interface ClipWithAsset {
-  clip: TimelineClip;
-  asset: MediaAsset | undefined;
-  inputIndex: number;
-  inputName: string;
+interface ClipInfo {
+  assetId?: string;
+  type: string;
+  startTime: number;
+  duration: number;
+  opacity: number;
+  volume: number;
+  name: string;
+  text?: string;
+  fontSize?: number;
+  fontColor?: string;
+  trackMuted: boolean;
 }
 
 export class VideoRenderer {
-  private ffmpeg: FFmpeg;
-  private loaded = false;
-
-  constructor() {
-    this.ffmpeg = new FFmpeg();
-  }
+  private canvas: HTMLCanvasElement | null = null;
+  private ctx: CanvasRenderingContext2D | null = null;
+  private cancelled = false;
 
   async init(): Promise<void> {
-    if (this.loaded) return;
-
-    await this.ffmpeg.load({
-      coreURL: CORE_URL,
-      wasmURL: WASM_URL,
-    });
-
-    this.loaded = true;
+    this.cancelled = false;
   }
 
   async render(
@@ -79,96 +48,217 @@ export class VideoRenderer {
     exportSettings: ExportSettings,
     onProgress?: ProgressCallback
   ): Promise<RenderResult> {
-    if (!this.loaded) {
-      await this.init();
-    }
+    this.cancelled = false;
 
     const report = (progress: number, stage: string) => {
       onProgress?.(Math.min(Math.max(progress, 0), 1), stage);
     };
 
     const quality = QUALITY_MAP[exportSettings.quality];
-    const format = FORMAT_MAP[exportSettings.format];
-    const [resW, resH] = this.parseResolution(
-      exportSettings.resolution,
-      quality
-    );
-    const fps = exportSettings.fps || 30;
+    const [width, height] = this.parseResolution(exportSettings.resolution, quality.width, quality.height);
+    const fps = Math.min(exportSettings.fps || 30, 30);
     const totalDuration = this.computeTotalDuration(tracks);
 
     if (totalDuration <= 0) {
-      throw new Error("Timeline is empty — nothing to render.");
+      throw new Error("Таймлайн пуст — нечего рендерить");
     }
-
-    this.ffmpeg.on("progress", ({ progress }) => {
-      report(0.3 + progress * 0.6, "Encoding");
-    });
-
-    const assetMap = new Map<string, MediaAsset>(
-      assets.map((a) => [a.id, a])
-    );
-
-    const videoClips = this.collectClips(tracks, ["video", "image"], assetMap);
-    const audioClips = this.collectClips(tracks, ["audio"], assetMap);
-    const videoTracksWithAudio = this.collectClips(
-      tracks,
-      ["video"],
-      assetMap
-    );
 
     report(0, "Loading assets");
-    const allClips = [...videoClips, ...audioClips];
-    const uniqueAssetIds = new Set<string>();
-    const inputFiles: { name: string; assetId: string }[] = [];
 
-    for (const entry of allClips) {
-      if (!entry.asset) continue;
-      if (uniqueAssetIds.has(entry.asset.id)) continue;
-      uniqueAssetIds.add(entry.asset.id);
+    this.canvas = document.createElement("canvas");
+    this.canvas.width = width;
+    this.canvas.height = height;
+    this.ctx = this.canvas.getContext("2d")!;
 
-      const ext = this.getExtension(entry.asset.url, entry.asset.type);
-      const inputName = `input_${entry.asset.id}.${ext}`;
+    const assetMap = new Map<string, MediaAsset>();
+    for (const a of assets) assetMap.set(a.id, a);
 
-      report(
-        (inputFiles.length / Math.max(allClips.length, 1)) * 0.3,
-        `Loading ${entry.asset.name}`
-      );
+    const clips = this.collectAllClips(tracks);
 
-      const data = await fetchFile(entry.asset.url);
-      await this.ffmpeg.writeFile(inputName, data);
-      inputFiles.push({ name: inputName, assetId: entry.asset.id });
+    const imageCache = new Map<string, HTMLImageElement>();
+    const audioBuffers = new Map<string, { element: HTMLAudioElement; url: string }>();
+
+    let loadedCount = 0;
+    const assetsToLoad = new Set<string>();
+    for (const c of clips) {
+      if (c.assetId) assetsToLoad.add(c.assetId);
     }
 
-    report(0.3, "Building render graph");
+    for (const assetId of assetsToLoad) {
+      if (this.cancelled) throw new Error("Отменено");
+      const asset = assetMap.get(assetId);
+      if (!asset) continue;
 
-    const outputName = `output.${format.extension}`;
-    const args = this.buildFFmpegCommand(
-      videoClips,
-      audioClips,
-      videoTracksWithAudio,
-      inputFiles,
-      outputName,
-      resW,
-      resH,
-      fps,
-      totalDuration,
-      quality,
-      format,
-      exportSettings
-    );
+      report(loadedCount / Math.max(assetsToLoad.size, 1) * 0.2, `Loading ${asset.name}`);
 
-    report(0.35, "Rendering");
-    await this.ffmpeg.exec(args);
+      if (asset.type === "image") {
+        const img = await this.loadImage(asset.url);
+        imageCache.set(assetId, img);
+      } else if (asset.type === "audio") {
+        audioBuffers.set(assetId, { element: new Audio(), url: asset.url });
+      } else if (asset.type === "video") {
+        const img = await this.loadImage(asset.url).catch(() => null);
+        if (img) imageCache.set(assetId, img);
+      }
+
+      loadedCount++;
+    }
+
+    report(0.2, "Rendering");
+
+    const isWebm = exportSettings.format === "webm" || exportSettings.format === "gif";
+    const mimeType = isWebm ? "video/webm;codecs=vp9" : "video/webm;codecs=vp9";
+    const supportedMime = MediaRecorder.isTypeSupported(mimeType)
+      ? mimeType
+      : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
+        ? "video/webm;codecs=vp8"
+        : "video/webm";
+
+    const stream = this.canvas.captureStream(fps);
+
+    const audioCtx = new AudioContext();
+    const destination = audioCtx.createMediaStreamDestination();
+
+    const audioClips = clips.filter(c => {
+      if (c.trackMuted) return false;
+      const asset = c.assetId ? assetMap.get(c.assetId) : null;
+      return asset?.type === "audio";
+    });
+
+    const activeAudioElements: Array<{ element: HTMLAudioElement; source: MediaElementAudioSourceNode; gainNode: GainNode; clip: ClipInfo }> = [];
+
+    for (const ac of audioClips) {
+      if (!ac.assetId) continue;
+      const asset = assetMap.get(ac.assetId);
+      if (!asset) continue;
+
+      const audioEl = new Audio();
+      audioEl.crossOrigin = "anonymous";
+      audioEl.src = asset.url;
+      audioEl.preload = "auto";
+      audioEl.volume = 0;
+
+      await new Promise<void>((resolve) => {
+        audioEl.addEventListener("canplaythrough", () => resolve(), { once: true });
+        audioEl.addEventListener("error", () => resolve(), { once: true });
+        audioEl.load();
+        setTimeout(resolve, 3000);
+      });
+
+      try {
+        const source = audioCtx.createMediaElementSource(audioEl);
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = 0;
+        source.connect(gainNode);
+        gainNode.connect(destination);
+        activeAudioElements.push({ element: audioEl, source, gainNode, clip: ac });
+      } catch {
+        /* skip audio that can't be connected */
+      }
+    }
+
+    for (const audioTrack of destination.stream.getAudioTracks()) {
+      stream.addTrack(audioTrack);
+    }
+
+    const bitrate = exportSettings.bitrate > 0 ? exportSettings.bitrate * 1000 : quality.bitrate;
+    const recorder = new MediaRecorder(stream, {
+      mimeType: supportedMime,
+      videoBitsPerSecond: bitrate,
+    });
+
+    const chunks: Blob[] = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+
+    recorder.start(100);
+
+    const totalFrames = Math.ceil(totalDuration * fps);
+    const frameDuration = 1 / fps;
+
+    for (let frame = 0; frame <= totalFrames; frame++) {
+      if (this.cancelled) {
+        recorder.stop();
+        audioCtx.close();
+        throw new Error("Отменено");
+      }
+
+      const currentTime = frame * frameDuration;
+      const progress = 0.2 + (frame / totalFrames) * 0.7;
+      if (frame % Math.max(1, Math.floor(fps / 2)) === 0) {
+        report(progress, "Rendering");
+      }
+
+      this.ctx.fillStyle = "#000000";
+      this.ctx.fillRect(0, 0, width, height);
+
+      for (const clip of clips) {
+        if (currentTime < clip.startTime || currentTime >= clip.startTime + clip.duration) continue;
+        const asset = clip.assetId ? assetMap.get(clip.assetId) : null;
+
+        if ((clip.type === "image" || clip.type === "video") && clip.assetId) {
+          const img = imageCache.get(clip.assetId);
+          if (img) {
+            this.ctx.globalAlpha = clip.opacity;
+            this.drawImageFit(img, width, height);
+            this.ctx.globalAlpha = 1;
+          }
+        }
+
+        if (clip.type === "text") {
+          this.ctx.globalAlpha = clip.opacity;
+          const fontSize = Math.round((clip.fontSize || 48) * (height / 1080));
+          this.ctx.font = `bold ${fontSize}px sans-serif`;
+          this.ctx.fillStyle = clip.fontColor || "#ffffff";
+          this.ctx.textAlign = "center";
+          this.ctx.textBaseline = "middle";
+          this.ctx.shadowColor = "rgba(0,0,0,0.7)";
+          this.ctx.shadowBlur = 8;
+          this.ctx.fillText(clip.text || clip.name, width / 2, height / 2);
+          this.ctx.shadowBlur = 0;
+          this.ctx.globalAlpha = 1;
+        }
+      }
+
+      for (const aa of activeAudioElements) {
+        const clip = aa.clip;
+        if (currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration) {
+          const clipOffset = currentTime - clip.startTime;
+          if (aa.element.paused) {
+            aa.element.currentTime = clipOffset;
+            aa.element.play().catch(() => {});
+          }
+          aa.gainNode.gain.value = clip.volume;
+        } else {
+          if (!aa.element.paused) {
+            aa.element.pause();
+          }
+          aa.gainNode.gain.value = 0;
+        }
+      }
+
+      await new Promise(r => setTimeout(r, frameDuration * 50));
+    }
 
     report(0.9, "Reading output");
-    const outputData = await this.ffmpeg.readFile(outputName);
 
-    const mimeType = this.getMimeType(format.extension);
-    const blob = new Blob([outputData], { type: mimeType });
+    for (const aa of activeAudioElements) {
+      aa.element.pause();
+      aa.gainNode.gain.value = 0;
+    }
+
+    await new Promise<void>((resolve) => {
+      recorder.onstop = () => resolve();
+      recorder.stop();
+    });
+
+    await audioCtx.close();
+
+    const ext = "webm";
+    const blob = new Blob(chunks, { type: "video/webm" });
     const url = URL.createObjectURL(blob);
-    const fileName = `export_${Date.now()}.${format.extension}`;
-
-    await this.cleanup(inputFiles.map((f) => f.name), outputName);
+    const fileName = `${exportSettings.format === "gif" ? "animation" : "video"}_${Date.now()}.${ext}`;
 
     report(1, "Complete");
 
@@ -176,24 +266,20 @@ export class VideoRenderer {
   }
 
   terminate(): void {
-    try {
-      this.ffmpeg.terminate();
-    } catch {
-      /* already terminated */
-    }
-    this.loaded = false;
-    this.ffmpeg = new FFmpeg();
+    this.cancelled = true;
+    this.canvas = null;
+    this.ctx = null;
   }
 
-  private parseResolution(
-    resolution: string,
-    fallback: QualityProfile
-  ): [number, number] {
+  private parseResolution(resolution: string, defaultW: number, defaultH: number): [number, number] {
     const match = resolution.match(/^(\d+)\s*[xX×]\s*(\d+)$/);
     if (match) {
-      return [parseInt(match[1], 10), parseInt(match[2], 10)];
+      const w = parseInt(match[1], 10);
+      const h = parseInt(match[2], 10);
+      if (w <= 1920 && h <= 1080) return [w, h];
+      return [1920, 1080];
     }
-    return [fallback.width, fallback.height];
+    return [defaultW, defaultH];
   }
 
   private computeTotalDuration(tracks: Track[]): number {
@@ -207,276 +293,58 @@ export class VideoRenderer {
     return max;
   }
 
-  private collectClips(
-    tracks: Track[],
-    types: string[],
-    assetMap: Map<string, MediaAsset>
-  ): ClipWithAsset[] {
-    const results: ClipWithAsset[] = [];
+  private collectAllClips(tracks: Track[]): ClipInfo[] {
+    const result: ClipInfo[] = [];
     for (const track of tracks) {
       if (!track.visible && track.type !== "audio") continue;
-      if (track.muted && track.type === "audio") continue;
-
       for (const clip of track.clips) {
-        if (!types.includes(clip.type) && !types.includes(track.type)) continue;
-        const asset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
-        results.push({
-          clip,
-          asset,
-          inputIndex: -1,
-          inputName: "",
+        result.push({
+          assetId: clip.assetId,
+          type: clip.type || track.type,
+          startTime: clip.startTime,
+          duration: clip.duration,
+          opacity: clip.opacity ?? 1,
+          volume: clip.volume ?? 1,
+          name: clip.name,
+          text: clip.text,
+          fontSize: clip.fontSize,
+          fontColor: clip.fontColor,
+          trackMuted: track.muted,
         });
       }
     }
-    return results.sort((a, b) => a.clip.startTime - b.clip.startTime);
+    return result.sort((a, b) => a.startTime - b.startTime);
   }
 
-  private getExtension(url: string, type: string): string {
-    try {
-      const pathname = new URL(url).pathname;
-      const ext = pathname.split(".").pop()?.toLowerCase();
-      if (ext && ext.length <= 5 && ext.length >= 2) return ext;
-    } catch {
-      /* fall through */
-    }
-
-    switch (type) {
-      case "video":
-        return "mp4";
-      case "audio":
-        return "mp3";
-      case "image":
-        return "png";
-      default:
-        return "bin";
-    }
+  private loadImage(url: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to load: ${url}`));
+      img.src = url;
+    });
   }
 
-  private buildFFmpegCommand(
-    videoClips: ClipWithAsset[],
-    audioClips: ClipWithAsset[],
-    videoTracksWithAudio: ClipWithAsset[],
-    inputFiles: { name: string; assetId: string }[],
-    outputName: string,
-    width: number,
-    height: number,
-    fps: number,
-    totalDuration: number,
-    quality: QualityProfile,
-    format: FormatProfile,
-    settings: ExportSettings
-  ): string[] {
-    const args: string[] = ["-y"];
-    const inputIndexMap = new Map<string, number>();
-    let currentInput = 0;
+  private drawImageFit(img: HTMLImageElement, canvasW: number, canvasH: number) {
+    if (!this.ctx) return;
+    const imgRatio = img.naturalWidth / img.naturalHeight;
+    const canvasRatio = canvasW / canvasH;
+    let drawW: number, drawH: number, drawX: number, drawY: number;
 
-    args.push(
-      "-f",
-      "lavfi",
-      "-i",
-      `color=c=black:s=${width}x${height}:r=${fps}:d=${totalDuration}`
-    );
-    const bgIndex = currentInput++;
-
-    for (const file of inputFiles) {
-      args.push("-i", file.name);
-      inputIndexMap.set(file.assetId, currentInput++);
-    }
-
-    const filterParts: string[] = [];
-    let lastVideoLabel = `[${bgIndex}:v]`;
-    let overlayCount = 0;
-
-    const sortedVideoClips = [...videoClips].sort(
-      (a, b) => a.clip.startTime - b.clip.startTime
-    );
-
-    for (const entry of sortedVideoClips) {
-      if (!entry.asset) continue;
-      const idx = inputIndexMap.get(entry.asset.id);
-      if (idx === undefined) continue;
-
-      const clip = entry.clip;
-      const startTime = clip.startTime;
-      const endTime = clip.startTime + clip.duration;
-      const speed = clip.speed || 1;
-      const opacity = clip.opacity ?? 1;
-
-      const overlayLabel = `ov${overlayCount}`;
-      const scaledLabel = `sc${overlayCount}`;
-
-      if (entry.asset.type === "image" || clip.type === "image") {
-        filterParts.push(
-          `[${idx}:v]loop=loop=-1:size=1:start=0,` +
-            `setpts=PTS-STARTPTS,` +
-            `scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
-            `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,` +
-            `setpts=PTS+${startTime}/TB` +
-            `${opacity < 1 ? `,format=yuva420p,colorchannelmixer=aa=${opacity}` : ""}` +
-            `[${scaledLabel}]`
-        );
-      } else {
-        const trimStart = clip.offset || 0;
-        const trimEnd = trimStart + clip.duration * speed;
-        filterParts.push(
-          `[${idx}:v]trim=start=${trimStart}:end=${trimEnd},` +
-            `setpts=(PTS-STARTPTS)/${speed},` +
-            `scale=${width}:${height}:force_original_aspect_ratio=decrease,` +
-            `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,` +
-            `setpts=PTS+${startTime}/TB` +
-            `${opacity < 1 ? `,format=yuva420p,colorchannelmixer=aa=${opacity}` : ""}` +
-            `[${scaledLabel}]`
-        );
-      }
-
-      filterParts.push(
-        `${lastVideoLabel}[${scaledLabel}]overlay=` +
-          `enable='between(t,${startTime},${endTime})':` +
-          `eof_action=pass[${overlayLabel}]`
-      );
-
-      lastVideoLabel = `[${overlayLabel}]`;
-      overlayCount++;
-    }
-
-    const audioEntries: string[] = [];
-    const allAudioSources = [...audioClips, ...videoTracksWithAudio];
-
-    for (const entry of allAudioSources) {
-      if (!entry.asset) continue;
-      if (entry.asset.type === "image") continue;
-      const idx = inputIndexMap.get(entry.asset.id);
-      if (idx === undefined) continue;
-
-      const clip = entry.clip;
-      if (clip.type === "image") continue;
-      const speed = clip.speed || 1;
-      const volume = clip.volume ?? 1;
-      const trimStart = clip.offset || 0;
-      const trimEnd = trimStart + clip.duration * speed;
-      const aLabel = `a${audioEntries.length}`;
-
-      let atempo = "";
-      if (speed !== 1) {
-        let remaining = speed;
-        const tempoFilters: string[] = [];
-        while (remaining > 2.0) {
-          tempoFilters.push("atempo=2.0");
-          remaining /= 2.0;
-        }
-        while (remaining < 0.5) {
-          tempoFilters.push("atempo=0.5");
-          remaining /= 0.5;
-        }
-        tempoFilters.push(`atempo=${remaining}`);
-        atempo = `,${tempoFilters.join(",")}`;
-      }
-
-      filterParts.push(
-        `[${idx}:a]atrim=start=${trimStart}:end=${trimEnd},` +
-          `asetpts=PTS-STARTPTS${atempo},` +
-          `volume=${volume},` +
-          `adelay=${Math.round(clip.startTime * 1000)}|${Math.round(clip.startTime * 1000)}` +
-          `[${aLabel}]`
-      );
-
-      audioEntries.push(`[${aLabel}]`);
-    }
-
-    let finalAudioLabel = "";
-    if (audioEntries.length > 0 && format.audioCodec !== null) {
-      const mixLabel = "amixed";
-      if (audioEntries.length === 1) {
-        finalAudioLabel = audioEntries[0];
-      } else {
-        filterParts.push(
-          `${audioEntries.join("")}amix=inputs=${audioEntries.length}:duration=longest:dropout_transition=0[${mixLabel}]`
-        );
-        finalAudioLabel = `[${mixLabel}]`;
-      }
-    }
-
-    const finalVideoLabel =
-      overlayCount > 0 ? lastVideoLabel : `[${bgIndex}:v]`;
-
-    if (filterParts.length > 0) {
-      args.push("-filter_complex", filterParts.join(";"));
-      args.push("-map", finalVideoLabel);
-
-      if (finalAudioLabel && format.audioCodec !== null) {
-        args.push("-map", finalAudioLabel);
-      }
+    if (imgRatio > canvasRatio) {
+      drawW = canvasW;
+      drawH = canvasW / imgRatio;
+      drawX = 0;
+      drawY = (canvasH - drawH) / 2;
     } else {
-      args.push("-map", `${bgIndex}:v`);
+      drawH = canvasH;
+      drawW = canvasH * imgRatio;
+      drawX = (canvasW - drawW) / 2;
+      drawY = 0;
     }
 
-    if (format.videoCodec === "gif") {
-      args.push("-c:v", "gif");
-      args.push("-r", String(Math.min(fps, 15)));
-    } else {
-      args.push("-c:v", format.videoCodec);
-      args.push("-crf", String(quality.crf));
-      args.push("-r", String(fps));
-
-      if (format.videoCodec === "libx264") {
-        args.push("-preset", "ultrafast");
-        args.push("-pix_fmt", "yuv420p");
-        args.push("-movflags", "+faststart");
-      }
-
-      if (format.videoCodec === "libvpx-vp9") {
-        args.push("-b:v", "0");
-        args.push("-deadline", "realtime");
-        args.push("-cpu-used", "8");
-      }
-    }
-
-    if (format.audioCodec !== null && finalAudioLabel) {
-      args.push("-c:a", format.audioCodec);
-
-      if (format.audioCodec === "aac") {
-        args.push("-b:a", "192k");
-      } else if (format.audioCodec === "libopus") {
-        args.push("-b:a", "128k");
-      }
-    } else if (format.audioCodec === null || !finalAudioLabel) {
-      args.push("-an");
-    }
-
-    if (settings.bitrate > 0 && format.videoCodec !== "gif") {
-      args.push("-b:v", `${settings.bitrate}k`);
-    }
-
-    args.push("-t", String(totalDuration));
-    args.push("-shortest");
-    args.push(outputName);
-
-    return args;
-  }
-
-  private getMimeType(extension: string): string {
-    const mimeTypes: Record<string, string> = {
-      mp4: "video/mp4",
-      webm: "video/webm",
-      avi: "video/x-msvideo",
-      mov: "video/quicktime",
-      gif: "image/gif",
-    };
-    return mimeTypes[extension] || "application/octet-stream";
-  }
-
-  private async cleanup(
-    inputNames: string[],
-    outputName: string
-  ): Promise<void> {
-    const filesToDelete = [...inputNames, outputName];
-    for (const file of filesToDelete) {
-      try {
-        await this.ffmpeg.deleteFile(file);
-      } catch {
-        /* file may not exist */
-      }
-    }
+    this.ctx.drawImage(img, drawX, drawY, drawW, drawH);
   }
 }
 
