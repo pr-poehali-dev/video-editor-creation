@@ -37,6 +37,8 @@ interface EditorStore extends EditorState {
   selectTrack: (trackId: string | null) => void;
   draggingAsset: MediaAsset | null;
   setDraggingAsset: (asset: MediaAsset | null) => void;
+  previewFilter: string | null;
+  setPreviewFilter: (filter: string | null) => void;
   setProject: (project: Partial<EditorState['project']>) => void;
   resetEditor: (projectId?: number, projectName?: string) => void;
   getProjectData: () => { tracks: Track[]; project: EditorState['project']; exportSettings: EditorState['exportSettings'] };
@@ -62,8 +64,11 @@ const useEditorStore = create<EditorStore>((set, get) => ({
   activePanel: 'media',
   exportSettings: { format: 'mp4', quality: 'high', resolution: '1920x1080', fps: 30, codec: 'H.264', bitrate: 8000 },
   draggingAsset: null,
+  previewFilter: null,
 
   setDraggingAsset: (asset) => set({ draggingAsset: asset }),
+
+  setPreviewFilter: (filter) => set({ previewFilter: filter }),
 
   selectTrack: (trackId) => set({ selectedTrackId: trackId }),
 
@@ -329,6 +334,7 @@ const useEditorStore = create<EditorStore>((set, get) => ({
     zoom: 1,
     snapEnabled: true,
     activePanel: 'media',
+    previewFilter: null,
   }),
 }));
 

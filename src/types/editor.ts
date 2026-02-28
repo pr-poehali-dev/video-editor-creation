@@ -94,4 +94,5 @@ export interface EditorState {
   snapEnabled: boolean;
   activePanel: string;
   exportSettings: ExportSettings;
+  previewFilter: string | null;
 }

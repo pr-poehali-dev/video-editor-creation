@@ -106,7 +106,7 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 const MediaPanel = () => {
-  const { assets, addAsset, removeAsset, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime, project, addClip, selectedClipId, updateClip } = useEditorStore();
+  const { assets, addAsset, removeAsset, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime, project, addClip, selectedClipId, updateClip, setPreviewFilter } = useEditorStore();
   const { isAuthenticated } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -376,6 +376,8 @@ const MediaPanel = () => {
                     <div
                       key={item.name}
                       onClick={() => handleApplyEffect(item.name)}
+                      onMouseEnter={() => selectedClipId && setPreviewFilter(item.name)}
+                      onMouseLeave={() => setPreviewFilter(null)}
                       className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${selectedClipId ? 'hover:bg-secondary/50' : 'opacity-50 cursor-default'}`}
                     >
                       <Icon name={item.icon} size={12} className="text-muted-foreground" />
@@ -397,6 +399,8 @@ const MediaPanel = () => {
                     <div key={p.slug} className="mb-2">
                       <div
                         onClick={() => handleApplyEffect(p.name)}
+                        onMouseEnter={() => selectedClipId && setPreviewFilter(p.name)}
+                        onMouseLeave={() => setPreviewFilter(null)}
                         className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer transition-colors ${selectedClipId ? 'hover:bg-secondary/50' : 'opacity-50 cursor-default'}`}
                       >
                         <Icon name={p.icon || 'Palette'} size={12} className="text-primary" />
@@ -409,6 +413,8 @@ const MediaPanel = () => {
                             <div
                               key={i}
                               onClick={() => handleApplyEffect(f)}
+                              onMouseEnter={() => selectedClipId && setPreviewFilter(f)}
+                              onMouseLeave={() => setPreviewFilter(null)}
                               className={`text-[10px] px-2 py-1 rounded cursor-pointer transition-colors ${selectedClipId ? 'hover:bg-secondary/30 text-muted-foreground' : 'opacity-50 cursor-default text-muted-foreground'}`}
                             >
                               {f}

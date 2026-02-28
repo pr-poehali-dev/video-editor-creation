@@ -33,7 +33,36 @@ interface ActiveClip {
   trackType: string;
   trackVisible: boolean;
   trackMuted: boolean;
+  filters: Array<{ name: string; type: string; params: Record<string, number | string | boolean> }>;
 }
+
+const getFilterStyle = (filters: ActiveClip['filters'], previewFilter?: string | null): string => {
+  const allFilters = [...(filters || [])];
+  if (previewFilter && !allFilters.some(f => f.name === previewFilter)) {
+    allFilters.push({ name: previewFilter, type: previewFilter.toLowerCase(), params: { intensity: 50 } });
+  }
+  if (allFilters.length === 0) return 'none';
+  const parts: string[] = [];
+  for (const f of allFilters) {
+    const intensity = typeof f.params?.intensity === 'number' ? f.params.intensity : 50;
+    const norm = intensity / 100;
+    switch (f.name) {
+      case 'Яркость': parts.push(`brightness(${0.5 + norm})`); break;
+      case 'Контраст': parts.push(`contrast(${0.5 + norm})`); break;
+      case 'Насыщенность': parts.push(`saturate(${norm * 2})`); break;
+      case 'Температура': parts.push(`sepia(${norm * 0.5})`); break;
+      case 'Размытие': parts.push(`blur(${norm * 8}px)`); break;
+      case 'Резкость': parts.push(`contrast(${1 + norm * 0.3})`); break;
+      case 'Виньетка': break;
+      case 'Шум': parts.push(`contrast(${1 + norm * 0.1}) brightness(${1 - norm * 0.05})`); break;
+      case 'Глитч': parts.push(`hue-rotate(${norm * 90}deg) saturate(${1.5 + norm})`); break;
+      case 'Зелёный экран': break;
+      case 'Синий экран': break;
+      default: parts.push(`saturate(${1 + norm * 0.3}) contrast(${1 + norm * 0.1})`); break;
+    }
+  }
+  return parts.length > 0 ? parts.join(' ') : 'none';
+};
 
 const PreviewPanel = () => {
   const currentTime = useEditorStore(s => s.currentTime);
@@ -43,6 +72,8 @@ const PreviewPanel = () => {
   const project = useEditorStore(s => s.project);
   const tracks = useEditorStore(s => s.tracks);
   const assets = useEditorStore(s => s.assets);
+  const previewFilter = useEditorStore(s => s.previewFilter);
+  const selectedClipId = useEditorStore(s => s.selectedClipId);
 
   const [volume, setVolume] = useState(80);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -81,6 +112,7 @@ const PreviewPanel = () => {
             trackType: track.type,
             trackVisible: track.visible,
             trackMuted: track.muted,
+            filters: clip.filters || [],
           });
         }
       }
@@ -223,11 +255,12 @@ const PreviewPanel = () => {
     const hasUrl = !!clip.assetUrl;
 
     if (clip.type === 'image' && hasUrl) {
+      const clipPreview = selectedClipId === clip.id ? previewFilter : null;
       return (
         <div
           key={clip.id}
           className="absolute inset-0"
-          style={{ opacity: clip.opacity, zIndex: i }}
+          style={{ opacity: clip.opacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview) }}
         >
           <img
             src={clip.assetUrl}
@@ -240,11 +273,12 @@ const PreviewPanel = () => {
     }
 
     if (clip.type === 'video' && hasUrl) {
+      const clipPreview = selectedClipId === clip.id ? previewFilter : null;
       return (
         <div
           key={clip.id}
           className="absolute inset-0"
-          style={{ opacity: clip.opacity, zIndex: i }}
+          style={{ opacity: clip.opacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview) }}
         >
           <video
             ref={(el) => {
@@ -308,6 +342,11 @@ const PreviewPanel = () => {
           {hasVisual ? (
             <div className="absolute inset-0">
               {videoClips.map((clip, i) => renderMediaClip(clip, i))}
+              {videoClips.some(c => c.filters.some(f => f.name === 'Виньетка')) && (
+                <div className="absolute inset-0 pointer-events-none z-[99]" style={{
+                  background: 'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.7) 100%)'
+                }} />
+              )}
               {textClips.map((clip, i) => (
                 <div
                   key={clip.id}
