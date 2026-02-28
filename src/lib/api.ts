@@ -8,9 +8,12 @@ export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 async function request(base: string, path: string, options: RequestInit = {}) {
   const token = getToken();
+  const [routePath, queryString] = path.split('?');
+  let url = `${base}?route=${encodeURIComponent(routePath)}`;
+  if (queryString) url += `&${queryString}`;
   let res: Response;
   try {
-    res = await fetch(`${base}${path}`, {
+    res = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -18,11 +21,12 @@ async function request(base: string, path: string, options: RequestInit = {}) {
         ...(options.headers || {}),
       },
     });
-  } catch (e: any) {
-    console.error('[API] Network error:', e);
-    throw { status: 0, error: 'Нет соединения с сервером. Попробуйте позже.' };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'нет соединения';
+    console.error('[API] Network error:', url, msg);
+    throw { status: 0, error: `Ошибка сети: ${msg}` };
   }
-  let data: any;
+  let data: Record<string, unknown>;
   try {
     data = await res.json();
   } catch {

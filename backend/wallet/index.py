@@ -35,7 +35,8 @@ def handler(event, context):
         return {'statusCode': 200, 'headers': CORS, 'body': ''}
 
     method = event.get('httpMethod', 'GET')
-    path = event.get('path', '/')
+    params = event.get('queryStringParameters') or {}
+    path = params.get('route', event.get('path', '/'))
     body = {}
     if event.get('body'):
         try:

@@ -7,10 +7,11 @@
       "expectedStatus": 200
     },
     {
-      "name": "Root returns 404",
-      "method": "GET",
-      "path": "/",
-      "expectedStatus": 404,
+      "name": "Register missing fields",
+      "method": "POST",
+      "path": "/?route=%2Fregister",
+      "body": {},
+      "expectedStatus": 400,
       "expectedBody": {"error": "string"},
       "bodyMatcher": "partial"
     }
