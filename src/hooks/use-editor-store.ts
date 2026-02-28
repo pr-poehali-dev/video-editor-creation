@@ -40,35 +40,15 @@ interface EditorStore extends EditorState {
 }
 
 const defaultTracks: Track[] = [
-  { id: 'v3', name: 'Видео 3', type: 'video', muted: false, locked: false, visible: true, height: 60, clips: [] },
-  { id: 'v2', name: 'Видео 2', type: 'video', muted: false, locked: false, visible: true, height: 60, clips: [
-    { id: 'demo6', type: 'image', trackId: 'v2', startTime: 2, duration: 4, offset: 0, name: 'Оверлей', opacity: 0.8, volume: 1, speed: 1, filters: [], keyframes: [] },
-  ]},
-  { id: 'v1', name: 'Видео 1', type: 'video', muted: false, locked: false, visible: true, height: 60, clips: [
-    { id: 'demo1', type: 'video', trackId: 'v1', startTime: 0, duration: 5, offset: 0, name: 'Интро', opacity: 1, volume: 1, speed: 1, filters: [], keyframes: [] },
-    { id: 'demo2', type: 'video', trackId: 'v1', startTime: 5.5, duration: 8, offset: 0, name: 'Основная сцена', opacity: 1, volume: 1, speed: 1, filters: [], keyframes: [] },
-    { id: 'demo3', type: 'image', trackId: 'v1', startTime: 14, duration: 3, offset: 0, name: 'Фото вставка', opacity: 1, volume: 1, speed: 1, filters: [], keyframes: [] },
-  ]},
-  { id: 't1', name: 'Текст', type: 'text', muted: false, locked: false, visible: true, height: 45, clips: [
-    { id: 'demo4', type: 'text', trackId: 't1', startTime: 1, duration: 4, offset: 0, name: 'Заголовок', text: 'Добро пожаловать', fontSize: 48, fontColor: '#ffffff', opacity: 1, volume: 1, speed: 1, filters: [], keyframes: [] },
-    { id: 'demo7', type: 'text', trackId: 't1', startTime: 6, duration: 3, offset: 0, name: 'Субтитры', text: 'Новый проект', fontSize: 24, fontColor: '#cccccc', opacity: 0.9, volume: 1, speed: 1, filters: [], keyframes: [] },
-  ]},
-  { id: 'a1', name: 'Аудио 1', type: 'audio', muted: false, locked: false, visible: true, height: 50, clips: [
-    { id: 'demo5', type: 'audio', trackId: 'a1', startTime: 0, duration: 20, offset: 0, name: 'Фоновая музыка', opacity: 1, volume: 0.7, speed: 1, filters: [], keyframes: [] },
-  ]},
-  { id: 'a2', name: 'Аудио 2', type: 'audio', muted: false, locked: false, visible: true, height: 50, clips: [] },
+  { id: 'v1', name: 'Видео 1', type: 'video', muted: false, locked: false, visible: true, height: 60, clips: [] },
+  { id: 't1', name: 'Текст', type: 'text', muted: false, locked: false, visible: true, height: 45, clips: [] },
+  { id: 'a1', name: 'Аудио 1', type: 'audio', muted: false, locked: false, visible: true, height: 50, clips: [] },
 ];
 
 const useEditorStore = create<EditorStore>((set, get) => ({
   project: { name: 'Новый проект', width: 1920, height: 1080, fps: 30, duration: 30 },
   tracks: defaultTracks,
-  assets: [
-    { id: 'a1', name: 'intro.mp4', type: 'video' as MediaType, url: '', duration: 5, size: 15400000 },
-    { id: 'a2', name: 'scene_main.mp4', type: 'video' as MediaType, url: '', duration: 8, size: 42000000 },
-    { id: 'a3', name: 'background.mp3', type: 'audio' as MediaType, url: '', duration: 180, size: 5200000 },
-    { id: 'a4', name: 'photo_01.jpg', type: 'image' as MediaType, url: '', duration: 0, size: 2100000, width: 1920, height: 1080 },
-    { id: 'a5', name: 'overlay.png', type: 'image' as MediaType, url: '', duration: 0, size: 890000, width: 800, height: 600 },
-  ],
+  assets: [],
   selectedClipId: null,
   selectedTrackId: null,
   currentTime: 0,

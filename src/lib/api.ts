@@ -101,4 +101,13 @@ export const shop = {
     request(urls.shop, '/promos/update', { method: 'POST', body: JSON.stringify(data) }),
 };
 
-export default { auth, wallet, projects, admin, shop };
+export const media = {
+  upload: (data: { file_data: string; file_name: string; mime_type: string; duration?: number; width?: number; height?: number; project_id?: number }) =>
+    request(urls.media, '/upload', { method: 'POST', body: JSON.stringify(data) }),
+  list: (project_id?: number) =>
+    request(urls.media, `/list${project_id ? `?project_id=${project_id}` : ''}`),
+  remove: (id: number) =>
+    request(urls.media, '/delete', { method: 'POST', body: JSON.stringify({ id }) }),
+};
+
+export default { auth, wallet, projects, admin, shop, media };

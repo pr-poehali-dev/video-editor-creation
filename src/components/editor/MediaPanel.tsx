@@ -1,6 +1,8 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
+import useAuth from '@/hooks/use-auth';
+import { media as mediaApi } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -97,35 +99,108 @@ const getMediaDuration = (file: File): Promise<number> => {
   });
 };
 
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
 const MediaPanel = () => {
-  const { assets, addAsset, removeAsset, activePanel, setActivePanel, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime } = useEditorStore();
+  const { assets, addAsset, removeAsset, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime } = useEditorStore();
+  const { isAuthenticated } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [uploading, setUploading] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || loaded) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mediaApi.list().then((data: any) => {
+      if (data.files) {
+        for (const f of data.files) {
+          const existing = useEditorStore.getState().assets;
+          if (existing.some(a => a.id === `server_${f.id}`)) continue;
+          addAsset({
+            name: f.file_name,
+            type: f.file_type,
+            url: f.cdn_url,
+            duration: f.duration || 0,
+            size: f.file_size,
+            width: f.width,
+            height: f.height,
+          });
+          const lastAsset = useEditorStore.getState().assets;
+          const added = lastAsset[lastAsset.length - 1];
+          if (added) {
+            useEditorStore.setState((s) => ({
+              assets: s.assets.map(a => a.id === added.id ? { ...a, id: `server_${f.id}` } : a)
+            }));
+          }
+        }
+      }
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, [isAuthenticated, loaded, addAsset]);
 
   const handleImport = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
 
+  const uploadFile = useCallback(async (file: File) => {
+    let type: 'video' | 'audio' | 'image' = 'video';
+    if (file.type.startsWith('audio/')) type = 'audio';
+    else if (file.type.startsWith('image/')) type = 'image';
+
+    const duration = await getMediaDuration(file);
+    const localUrl = URL.createObjectURL(file);
+
+    const asset = addAsset({
+      name: file.name,
+      type,
+      url: localUrl,
+      duration,
+      size: file.size,
+    });
+
+    if (!isAuthenticated) return;
+
+    setUploading(prev => [...prev, asset.id]);
+    try {
+      const b64 = await fileToBase64(file);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res: any = await mediaApi.upload({
+        file_data: b64,
+        file_name: file.name,
+        mime_type: file.type,
+        duration,
+      });
+      if (res.file?.cdn_url) {
+        useEditorStore.setState((s) => ({
+          assets: s.assets.map(a => a.id === asset.id ? { ...a, url: res.file.cdn_url, id: `server_${res.file.id}` } : a)
+        }));
+      }
+    } catch (e) {
+      console.error('Upload failed:', e);
+    } finally {
+      setUploading(prev => prev.filter(id => id !== asset.id));
+    }
+  }, [addAsset, isAuthenticated]);
+
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
     for (const file of Array.from(files)) {
-      let type: 'video' | 'audio' | 'image' = 'video';
-      if (file.type.startsWith('audio/')) type = 'audio';
-      else if (file.type.startsWith('image/')) type = 'image';
-
-      const duration = await getMediaDuration(file);
-
-      addAsset({
-        name: file.name,
-        type,
-        url: URL.createObjectURL(file),
-        duration,
-        size: file.size,
-      });
+      await uploadFile(file);
     }
     e.target.value = '';
-  }, [addAsset]);
+  }, [uploadFile]);
 
   const handleFileDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -134,25 +209,23 @@ const MediaPanel = () => {
     if (!files.length) return;
     for (const file of Array.from(files)) {
       if (!file.type.startsWith('video/') && !file.type.startsWith('audio/') && !file.type.startsWith('image/')) continue;
-      let type: 'video' | 'audio' | 'image' = 'video';
-      if (file.type.startsWith('audio/')) type = 'audio';
-      else if (file.type.startsWith('image/')) type = 'image';
-      const duration = await getMediaDuration(file);
-      addAsset({
-        name: file.name,
-        type,
-        url: URL.createObjectURL(file),
-        duration,
-        size: file.size,
-      });
+      await uploadFile(file);
     }
-  }, [addAsset]);
+  }, [uploadFile]);
 
   const handleDoubleClick = useCallback((asset: typeof assets[0]) => {
     const trackId = getCompatibleTrack(asset.type);
     addClipFromAsset(asset, trackId, currentTime);
     setCurrentTime(currentTime);
   }, [addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime]);
+
+  const handleRemoveAsset = useCallback(async (assetId: string) => {
+    if (assetId.startsWith('server_')) {
+      const serverId = parseInt(assetId.replace('server_', ''));
+      mediaApi.remove(serverId).catch(() => {});
+    }
+    removeAsset(assetId);
+  }, [removeAsset]);
 
   return (
     <div className="flex flex-col h-full editor-panel rounded-lg overflow-hidden">
@@ -175,8 +248,8 @@ const MediaPanel = () => {
         >
           <div className="px-2 py-1.5">
             <button onClick={handleImport} className={`w-full flex items-center justify-center gap-1.5 nle-button py-1.5 border border-dashed transition-colors ${isDraggingOver ? 'border-primary bg-primary/10' : 'border-border hover:border-primary'}`}>
-              <Icon name="Plus" size={12} />
-              <span>{isDraggingOver ? 'Отпустите файлы сюда' : 'Импорт медиа'}</span>
+              <Icon name={uploading.length > 0 ? 'Loader2' : 'Plus'} size={12} className={uploading.length > 0 ? 'animate-spin' : ''} />
+              <span>{isDraggingOver ? 'Отпустите файлы сюда' : uploading.length > 0 ? `Загрузка (${uploading.length})...` : 'Импорт медиа'}</span>
             </button>
             <input ref={fileInputRef} type="file" accept="video/*,audio/*,image/*" multiple onChange={handleFileChange} className="hidden" />
           </div>
@@ -184,7 +257,7 @@ const MediaPanel = () => {
             <div className="grid grid-cols-2 gap-1.5 pb-2">
               {assets.map(asset => (
                 <div key={asset.id} className="group relative bg-secondary/50 rounded p-1.5 cursor-grab hover:bg-secondary transition-colors active:cursor-grabbing" draggable onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify(asset)); e.dataTransfer.effectAllowed = 'copy'; setDraggingAsset(asset); }} onDragEnd={() => setDraggingAsset(null)} onDoubleClick={() => handleDoubleClick(asset)}>
-                  <div className="aspect-video rounded flex items-center justify-center mb-1 overflow-hidden" style={{ background: 'hsl(var(--editor-bg))' }}>
+                  <div className="aspect-video rounded flex items-center justify-center mb-1 overflow-hidden relative" style={{ background: 'hsl(var(--editor-bg))' }}>
                     {asset.type === 'image' && asset.url ? (
                       <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
                     ) : asset.type === 'video' && asset.url ? (
@@ -192,13 +265,18 @@ const MediaPanel = () => {
                     ) : (
                       <Icon name={typeIcon(asset.type)} size={20} className={typeColor(asset.type)} />
                     )}
+                    {uploading.includes(asset.id) && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <Icon name="Loader2" size={16} className="text-white animate-spin" />
+                      </div>
+                    )}
                   </div>
                   <div className="text-[10px] truncate">{asset.name}</div>
                   <div className="text-[9px] text-muted-foreground flex justify-between">
                     <span>{asset.duration > 0 ? formatDuration(asset.duration) : '—'}</span>
                     <span>{asset.size ? formatSize(asset.size) : ''}</span>
                   </div>
-                  <button onClick={() => removeAsset(asset.id)} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full p-0.5">
+                  <button onClick={() => handleRemoveAsset(asset.id)} className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full p-0.5">
                     <Icon name="X" size={8} />
                   </button>
                 </div>
@@ -243,15 +321,15 @@ const MediaPanel = () => {
 
         <TabsContent value="text" className="flex-1 m-0 min-h-0">
           <ScrollArea className="h-full px-2 py-1 editor-scrollbar">
-            <div className="space-y-1">
-              {textPresets.map(preset => (
-                <div key={preset.name} className="flex items-center gap-2.5 px-2 py-2 rounded hover:bg-secondary/50 cursor-pointer transition-colors">
+            <div className="space-y-1.5">
+              {textPresets.map(tp => (
+                <div key={tp.name} className="flex items-center gap-2 p-2 rounded bg-secondary/30 hover:bg-secondary/50 cursor-pointer transition-colors">
                   <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: 'hsl(var(--editor-bg))' }}>
-                    <Icon name={preset.icon} size={14} className="text-purple-400" />
+                    <Icon name={tp.icon} size={14} className="text-purple-400" />
                   </div>
                   <div>
-                    <div className="text-xs font-medium">{preset.name}</div>
-                    <div className="text-[10px] text-muted-foreground">{preset.desc}</div>
+                    <div className="text-[11px] font-medium">{tp.name}</div>
+                    <div className="text-[9px] text-muted-foreground">{tp.desc}</div>
                   </div>
                 </div>
               ))}
