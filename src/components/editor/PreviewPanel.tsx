@@ -18,6 +18,23 @@ const clipColors: Record<string, string> = {
   text: 'transparent',
 };
 
+interface ActiveClip {
+  id: string;
+  type: string;
+  name: string;
+  assetId?: string;
+  assetUrl?: string;
+  text?: string;
+  fontSize?: number;
+  fontColor?: string;
+  opacity: number;
+  clipVolume: number;
+  startTime: number;
+  trackType: string;
+  trackVisible: boolean;
+  trackMuted: boolean;
+}
+
 const PreviewPanel = () => {
   const currentTime = useEditorStore(s => s.currentTime);
   const isPlaying = useEditorStore(s => s.isPlaying);
@@ -25,15 +42,26 @@ const PreviewPanel = () => {
   const setCurrentTime = useEditorStore(s => s.setCurrentTime);
   const project = useEditorStore(s => s.project);
   const tracks = useEditorStore(s => s.tracks);
+  const assets = useEditorStore(s => s.assets);
 
   const [volume, setVolume] = useState(80);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
+  const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+
+  const assetMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of assets) {
+      if (a.url) map.set(a.id, a.url);
+    }
+    return map;
+  }, [assets]);
 
   const activeClips = useMemo(() => {
-    const clips: Array<{ id: string; type: string; name: string; text?: string; fontSize?: number; fontColor?: string; opacity: number; trackType: string; trackVisible: boolean; trackMuted: boolean }> = [];
+    const clips: ActiveClip[] = [];
     for (const track of tracks) {
       if (!track.visible) continue;
       for (const clip of track.clips) {
@@ -42,10 +70,14 @@ const PreviewPanel = () => {
             id: clip.id,
             type: clip.type,
             name: clip.name,
+            assetId: clip.assetId,
+            assetUrl: clip.assetId ? assetMap.get(clip.assetId) : undefined,
             text: clip.text,
             fontSize: clip.fontSize,
             fontColor: clip.fontColor,
             opacity: clip.opacity,
+            clipVolume: clip.volume,
+            startTime: clip.startTime,
             trackType: track.type,
             trackVisible: track.visible,
             trackMuted: track.muted,
@@ -54,7 +86,7 @@ const PreviewPanel = () => {
       }
     }
     return clips;
-  }, [tracks, currentTime]);
+  }, [tracks, currentTime, assetMap]);
 
   const maxTime = useMemo(() => {
     let max = 0;
@@ -68,6 +100,8 @@ const PreviewPanel = () => {
   useEffect(() => {
     if (!isPlaying) {
       if (animRef.current) cancelAnimationFrame(animRef.current);
+      audioRefs.current.forEach(audio => audio.pause());
+      videoRefs.current.forEach(video => video.pause());
       return;
     }
 
@@ -76,16 +110,13 @@ const PreviewPanel = () => {
     const tick = (now: number) => {
       const delta = (now - lastTimeRef.current) / 1000;
       lastTimeRef.current = now;
-
       const store = useEditorStore.getState();
       const next = store.currentTime + delta;
-
       if (next >= maxTime) {
         store.setCurrentTime(0);
         store.togglePlay();
         return;
       }
-
       store.setCurrentTime(next);
       animRef.current = requestAnimationFrame(tick);
     };
@@ -95,6 +126,67 @@ const PreviewPanel = () => {
       if (animRef.current) cancelAnimationFrame(animRef.current);
     };
   }, [isPlaying, maxTime]);
+
+  useEffect(() => {
+    const globalVol = volume / 100;
+    const activeAudioIds = new Set<string>();
+    const activeVideoIds = new Set<string>();
+
+    for (const clip of activeClips) {
+      if (clip.type === 'audio' && !clip.trackMuted && clip.assetUrl) {
+        activeAudioIds.add(clip.id);
+        let audio = audioRefs.current.get(clip.id);
+        if (!audio) {
+          audio = new Audio(clip.assetUrl);
+          audio.loop = false;
+          audioRefs.current.set(clip.id, audio);
+        }
+        const clipOffset = currentTime - clip.startTime;
+        if (Math.abs(audio.currentTime - clipOffset) > 0.5) {
+          audio.currentTime = clipOffset;
+        }
+        audio.volume = Math.min(1, clip.clipVolume * globalVol);
+        if (isPlaying && audio.paused) {
+          audio.play().catch(() => {});
+        }
+      }
+
+      if (clip.type === 'video' && clip.assetUrl) {
+        activeVideoIds.add(clip.id);
+        const video = videoRefs.current.get(clip.id);
+        if (video) {
+          const clipOffset = currentTime - clip.startTime;
+          if (Math.abs(video.currentTime - clipOffset) > 0.5) {
+            video.currentTime = clipOffset;
+          }
+          video.volume = clip.trackMuted ? 0 : Math.min(1, clip.clipVolume * globalVol);
+          if (isPlaying && video.paused) {
+            video.play().catch(() => {});
+          }
+        }
+      }
+    }
+
+    audioRefs.current.forEach((audio, id) => {
+      if (!activeAudioIds.has(id)) {
+        audio.pause();
+        audioRefs.current.delete(id);
+      }
+    });
+
+    videoRefs.current.forEach((video, id) => {
+      if (!activeVideoIds.has(id)) {
+        video.pause();
+      }
+    });
+  }, [activeClips, isPlaying, currentTime, volume]);
+
+  useEffect(() => {
+    return () => {
+      audioRefs.current.forEach(a => { a.pause(); a.src = ''; });
+      audioRefs.current.clear();
+    };
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     if (!previewRef.current) return;
@@ -127,6 +219,69 @@ const PreviewPanel = () => {
     setCurrentTime(Math.max(0, pct * maxTime));
   }, [maxTime, setCurrentTime]);
 
+  const renderMediaClip = (clip: ActiveClip, i: number) => {
+    const hasUrl = !!clip.assetUrl;
+
+    if (clip.type === 'image' && hasUrl) {
+      return (
+        <div
+          key={clip.id}
+          className="absolute inset-0"
+          style={{ opacity: clip.opacity, zIndex: i }}
+        >
+          <img
+            src={clip.assetUrl}
+            alt={clip.name}
+            className="w-full h-full object-contain"
+            style={{ background: '#0a0a0f' }}
+          />
+        </div>
+      );
+    }
+
+    if (clip.type === 'video' && hasUrl) {
+      return (
+        <div
+          key={clip.id}
+          className="absolute inset-0"
+          style={{ opacity: clip.opacity, zIndex: i }}
+        >
+          <video
+            ref={(el) => {
+              if (el) videoRefs.current.set(clip.id, el);
+              else videoRefs.current.delete(clip.id);
+            }}
+            src={clip.assetUrl}
+            className="w-full h-full object-contain"
+            style={{ background: '#0a0a0f' }}
+            playsInline
+            muted={clip.trackMuted}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={clip.id}
+        className="absolute inset-0 flex items-center justify-center"
+        style={{ opacity: clip.opacity, zIndex: i }}
+      >
+        <div
+          className="w-full h-full flex items-center justify-center"
+          style={{ background: clipColors[clip.type] || 'transparent' }}
+        >
+          <div className="flex flex-col items-center gap-1">
+            <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <Icon name={clip.type === 'video' ? 'Film' : 'Image'} size={24} className="text-white/60" />
+            </div>
+            <span className="text-[11px] text-white/70 font-medium">{clip.name}</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div ref={previewRef} className="flex flex-col h-full editor-panel rounded-lg overflow-hidden">
       <div className="editor-panel-header px-3 py-1.5 flex items-center justify-between">
@@ -152,25 +307,7 @@ const PreviewPanel = () => {
         >
           {hasVisual ? (
             <div className="absolute inset-0">
-              {videoClips.map((clip, i) => (
-                <div
-                  key={clip.id}
-                  className="absolute inset-0 flex items-center justify-center"
-                  style={{ opacity: clip.opacity, zIndex: i }}
-                >
-                  <div
-                    className="w-full h-full flex items-center justify-center"
-                    style={{ background: clipColors[clip.type] || 'transparent' }}
-                  >
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                        <Icon name={clip.type === 'video' ? 'Film' : 'Image'} size={24} className="text-white/60" />
-                      </div>
-                      <span className="text-[11px] text-white/70 font-medium">{clip.name}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              {videoClips.map((clip, i) => renderMediaClip(clip, i))}
               {textClips.map((clip, i) => (
                 <div
                   key={clip.id}
