@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useState } from 'react';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -75,23 +75,46 @@ const typeColor = (type: string) => {
   }
 };
 
+const getMediaDuration = (file: File): Promise<number> => {
+  return new Promise((resolve) => {
+    if (file.type.startsWith('image/')) {
+      resolve(0);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const el = file.type.startsWith('audio/') ? new Audio() : document.createElement('video');
+    el.preload = 'metadata';
+    el.onloadedmetadata = () => {
+      const dur = isFinite(el.duration) ? el.duration : 10;
+      URL.revokeObjectURL(url);
+      resolve(dur);
+    };
+    el.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(10);
+    };
+    el.src = url;
+  });
+};
+
 const MediaPanel = () => {
-  const { assets, addAsset, removeAsset, activePanel, setActivePanel, setDraggingAsset } = useEditorStore();
+  const { assets, addAsset, removeAsset, activePanel, setActivePanel, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime } = useEditorStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
 
   const handleImport = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
 
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    Array.from(files).forEach(file => {
+    for (const file of Array.from(files)) {
       let type: 'video' | 'audio' | 'image' = 'video';
       if (file.type.startsWith('audio/')) type = 'audio';
       else if (file.type.startsWith('image/')) type = 'image';
 
-      const duration = type === 'image' ? 0 : Math.random() * 30 + 5;
+      const duration = await getMediaDuration(file);
 
       addAsset({
         name: file.name,
@@ -100,9 +123,36 @@ const MediaPanel = () => {
         duration,
         size: file.size,
       });
-    });
+    }
     e.target.value = '';
   }, [addAsset]);
+
+  const handleFileDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    const files = e.dataTransfer.files;
+    if (!files.length) return;
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('video/') && !file.type.startsWith('audio/') && !file.type.startsWith('image/')) continue;
+      let type: 'video' | 'audio' | 'image' = 'video';
+      if (file.type.startsWith('audio/')) type = 'audio';
+      else if (file.type.startsWith('image/')) type = 'image';
+      const duration = await getMediaDuration(file);
+      addAsset({
+        name: file.name,
+        type,
+        url: URL.createObjectURL(file),
+        duration,
+        size: file.size,
+      });
+    }
+  }, [addAsset]);
+
+  const handleDoubleClick = useCallback((asset: typeof assets[0]) => {
+    const trackId = getCompatibleTrack(asset.type);
+    addClipFromAsset(asset, trackId, currentTime);
+    setCurrentTime(currentTime);
+  }, [addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime]);
 
   return (
     <div className="flex flex-col h-full editor-panel rounded-lg overflow-hidden">
@@ -116,20 +166,32 @@ const MediaPanel = () => {
           </TabsList>
         </div>
 
-        <TabsContent value="media" className="flex-1 m-0 flex flex-col min-h-0">
+        <TabsContent
+          value="media"
+          className="flex-1 m-0 flex flex-col min-h-0"
+          onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }}
+          onDragLeave={() => setIsDraggingOver(false)}
+          onDrop={handleFileDrop}
+        >
           <div className="px-2 py-1.5">
-            <button onClick={handleImport} className="w-full flex items-center justify-center gap-1.5 nle-button py-1.5 border border-dashed border-border hover:border-primary">
+            <button onClick={handleImport} className={`w-full flex items-center justify-center gap-1.5 nle-button py-1.5 border border-dashed transition-colors ${isDraggingOver ? 'border-primary bg-primary/10' : 'border-border hover:border-primary'}`}>
               <Icon name="Plus" size={12} />
-              <span>Импорт медиа</span>
+              <span>{isDraggingOver ? 'Отпустите файлы сюда' : 'Импорт медиа'}</span>
             </button>
             <input ref={fileInputRef} type="file" accept="video/*,audio/*,image/*" multiple onChange={handleFileChange} className="hidden" />
           </div>
           <ScrollArea className="flex-1 px-2 editor-scrollbar">
             <div className="grid grid-cols-2 gap-1.5 pb-2">
               {assets.map(asset => (
-                <div key={asset.id} className="group relative bg-secondary/50 rounded p-1.5 cursor-grab hover:bg-secondary transition-colors active:cursor-grabbing" draggable onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify(asset)); e.dataTransfer.effectAllowed = 'copy'; setDraggingAsset(asset); }} onDragEnd={() => setDraggingAsset(null)}>
-                  <div className="aspect-video rounded flex items-center justify-center mb-1" style={{ background: 'hsl(var(--editor-bg))' }}>
-                    <Icon name={typeIcon(asset.type)} size={20} className={typeColor(asset.type)} />
+                <div key={asset.id} className="group relative bg-secondary/50 rounded p-1.5 cursor-grab hover:bg-secondary transition-colors active:cursor-grabbing" draggable onDragStart={(e) => { e.dataTransfer.setData('application/json', JSON.stringify(asset)); e.dataTransfer.effectAllowed = 'copy'; setDraggingAsset(asset); }} onDragEnd={() => setDraggingAsset(null)} onDoubleClick={() => handleDoubleClick(asset)}>
+                  <div className="aspect-video rounded flex items-center justify-center mb-1 overflow-hidden" style={{ background: 'hsl(var(--editor-bg))' }}>
+                    {asset.type === 'image' && asset.url ? (
+                      <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
+                    ) : asset.type === 'video' && asset.url ? (
+                      <video src={asset.url} className="w-full h-full object-cover" muted />
+                    ) : (
+                      <Icon name={typeIcon(asset.type)} size={20} className={typeColor(asset.type)} />
+                    )}
                   </div>
                   <div className="text-[10px] truncate">{asset.name}</div>
                   <div className="text-[9px] text-muted-foreground flex justify-between">

@@ -276,6 +276,7 @@ const TimelinePanel = () => {
 
     if (targetTrackId) {
       addClipFromAsset(draggingAsset, targetTrackId, time);
+      setCurrentTime(time);
     }
 
     setDropTarget(null);
