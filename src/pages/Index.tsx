@@ -9,11 +9,34 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from '@/components/ui/resizable';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
+import useEditorStore from '@/hooks/use-editor-store';
+import { projects } from '@/lib/api';
 
 const Index = () => {
   const [rightPanel, setRightPanel] = useState<'properties' | 'export'>('properties');
+  const { projectId } = useParams<{ projectId: string }>();
+  const resetEditor = useEditorStore(s => s.resetEditor);
+  const setProject = useEditorStore(s => s.setProject);
+  const project = useEditorStore(s => s.project);
+  const loadedRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    const pid = projectId ? parseInt(projectId) : undefined;
+    if (loadedRef.current === projectId) return;
+    loadedRef.current = projectId;
+
+    if (pid) {
+      resetEditor(pid);
+      projects.get(pid).then((res: Record<string, unknown>) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const p = res.project as any;
+        if (p) setProject({ id: pid, name: p.name || 'Проект' });
+      }).catch(() => {});
+    }
+  }, [projectId, resetEditor, setProject]);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden" style={{ background: 'hsl(var(--editor-bg))' }}>
@@ -76,7 +99,7 @@ const Index = () => {
       <div className="h-5 flex items-center justify-between px-3 border-t border-border text-[9px] text-muted-foreground" style={{ background: 'hsl(var(--editor-panel))' }}>
         <div className="flex items-center gap-3">
           <span>VideoForge v1.0</span>
-          <span>Проект: Новый проект</span>
+          <span>Проект: {project.name}</span>
         </div>
         <div className="flex items-center gap-3">
           <span>RAM: 256 МБ</span>

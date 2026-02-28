@@ -37,6 +37,8 @@ interface EditorStore extends EditorState {
   selectTrack: (trackId: string | null) => void;
   draggingAsset: MediaAsset | null;
   setDraggingAsset: (asset: MediaAsset | null) => void;
+  setProject: (project: Partial<EditorState['project']>) => void;
+  resetEditor: (projectId?: number, projectName?: string) => void;
 }
 
 const defaultTracks: Track[] = [
@@ -290,6 +292,27 @@ const useEditorStore = create<EditorStore>((set, get) => ({
   setExportSettings: (settings) => set((state) => ({
     exportSettings: { ...state.exportSettings, ...settings },
   })),
+
+  setProject: (project) => set((state) => ({
+    project: { ...state.project, ...project },
+  })),
+
+  resetEditor: (projectId, projectName) => set({
+    project: { id: projectId, name: projectName || 'Новый проект', width: 1920, height: 1080, fps: 30, duration: 30 },
+    tracks: [
+      { id: 'v1', name: 'Видео 1', type: 'video' as MediaType, muted: false, locked: false, visible: true, height: 60, clips: [] },
+      { id: 't1', name: 'Текст', type: 'text' as MediaType, muted: false, locked: false, visible: true, height: 45, clips: [] },
+      { id: 'a1', name: 'Аудио 1', type: 'audio' as MediaType, muted: false, locked: false, visible: true, height: 50, clips: [] },
+    ],
+    assets: [],
+    selectedClipId: null,
+    selectedTrackId: null,
+    currentTime: 0,
+    isPlaying: false,
+    zoom: 1,
+    snapEnabled: true,
+    activePanel: 'media',
+  }),
 }));
 
 export default useEditorStore;

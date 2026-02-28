@@ -65,6 +65,7 @@ export interface Keyframe {
 }
 
 export interface ProjectSettings {
+  id?: number;
   name: string;
   width: number;
   height: number;

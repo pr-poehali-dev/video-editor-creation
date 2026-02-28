@@ -112,17 +112,18 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 const MediaPanel = () => {
-  const { assets, addAsset, removeAsset, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime } = useEditorStore();
+  const { assets, addAsset, removeAsset, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime, project } = useEditorStore();
   const { isAuthenticated } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploading, setUploading] = useState<string[]>([]);
-  const [loaded, setLoaded] = useState(false);
+  const [loadedProjectId, setLoadedProjectId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated || loaded) return;
+    if (!isAuthenticated || !project.id) return;
+    if (loadedProjectId === project.id) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mediaApi.list().then((data: any) => {
+    mediaApi.list(project.id).then((data: any) => {
       if (data.files) {
         for (const f of data.files) {
           const existing = useEditorStore.getState().assets;
@@ -145,9 +146,9 @@ const MediaPanel = () => {
           }
         }
       }
-      setLoaded(true);
-    }).catch(() => setLoaded(true));
-  }, [isAuthenticated, loaded, addAsset]);
+      setLoadedProjectId(project.id!);
+    }).catch(() => setLoadedProjectId(project.id!));
+  }, [isAuthenticated, project.id, loadedProjectId, addAsset]);
 
   const handleImport = useCallback(() => {
     fileInputRef.current?.click();
@@ -174,12 +175,14 @@ const MediaPanel = () => {
     setUploading(prev => [...prev, asset.id]);
     try {
       const b64 = await fileToBase64(file);
+      const pid = useEditorStore.getState().project.id;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const res: any = await mediaApi.upload({
         file_data: b64,
         file_name: file.name,
         mime_type: file.type,
         duration,
+        project_id: pid,
       });
       if (res.file?.cdn_url) {
         useEditorStore.setState((s) => ({

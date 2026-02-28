@@ -112,8 +112,13 @@ const Dashboard = () => {
 
   const handleCreateProject = async () => {
     try {
-      await projects.create('Новый проект');
-      loadData();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res: any = await projects.create('Новый проект');
+      if (res.project?.id) {
+        navigate(`/editor/${res.project.id}`);
+      } else {
+        loadData();
+      }
     } catch {}
   };
 
@@ -141,7 +146,7 @@ const Dashboard = () => {
       <header className="border-b border-border" style={{ background: 'hsl(var(--editor-panel))' }}>
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
               <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
                 <Icon name="Film" size={16} className="text-primary" />
               </div>
@@ -159,9 +164,9 @@ const Dashboard = () => {
               <Icon name="Store" size={12} />
               <span>Магазин</span>
             </button>
-            <button onClick={() => navigate('/')} className="nle-button flex items-center gap-1.5">
+            <button onClick={handleCreateProject} className="nle-button flex items-center gap-1.5">
               <Icon name="Clapperboard" size={12} />
-              <span>Редактор</span>
+              <span>Новый проект</span>
             </button>
             {user.role === 'admin' && (
               <button onClick={() => navigate('/admin')} className="nle-button flex items-center gap-1.5">
@@ -221,7 +226,7 @@ const Dashboard = () => {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {myProjects.map(p => (
-                    <div key={p.id} className="rounded-lg overflow-hidden group cursor-pointer hover:ring-1 hover:ring-primary/50 transition-all" style={{ background: 'hsl(var(--editor-bg))' }}>
+                    <div key={p.id} onClick={() => navigate(`/editor/${p.id}`)} className="rounded-lg overflow-hidden group cursor-pointer hover:ring-1 hover:ring-primary/50 transition-all" style={{ background: 'hsl(var(--editor-bg))' }}>
                       <div className="aspect-video flex items-center justify-center" style={{ background: 'hsl(var(--editor-panel-header))' }}>
                         {p.thumbnail_url ? (
                           <img src={p.thumbnail_url} alt={p.name} className="w-full h-full object-cover" />
