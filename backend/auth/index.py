@@ -81,6 +81,7 @@ def handler(event, context):
 
     headers = event.get('headers', {})
     token = headers.get('X-Auth-Token') or headers.get('x-auth-token') or ''
+    print(f"[AUTH] method={method} path={path} body_keys={list(body.keys()) if body else 'none'}")
 
     try:
         conn = get_db()

@@ -8,15 +8,27 @@ export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 async function request(base: string, path: string, options: RequestInit = {}) {
   const token = getToken();
-  const res = await fetch(`${base}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Auth-Token': token,
-      ...(options.headers || {}),
-    },
-  });
-  const data = await res.json();
+  let res: Response;
+  try {
+    res = await fetch(`${base}${path}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Auth-Token': token,
+        ...(options.headers || {}),
+      },
+    });
+  } catch (e: any) {
+    console.error('[API] Network error:', e);
+    throw { status: 0, error: 'Нет соединения с сервером. Попробуйте позже.' };
+  }
+  let data: any;
+  try {
+    data = await res.json();
+  } catch {
+    console.error('[API] Invalid JSON, status:', res.status);
+    throw { status: res.status, error: `Ошибка сервера (${res.status})` };
+  }
   if (!res.ok) throw { status: res.status, ...data };
   return data;
 }
