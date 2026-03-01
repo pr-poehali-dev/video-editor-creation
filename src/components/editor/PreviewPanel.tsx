@@ -102,6 +102,7 @@ const PreviewPanel = () => {
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const scrubbing = useRef(false);
   const progressBarRef = useRef<HTMLDivElement>(null);
+  const userInteracted = useRef(false);
 
   const assetMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -209,6 +210,16 @@ const PreviewPanel = () => {
   }, [isPlaying, maxTime]);
 
   useEffect(() => {
+    const onInteraction = () => { userInteracted.current = true; };
+    document.addEventListener('click', onInteraction, { once: true });
+    document.addEventListener('keydown', onInteraction, { once: true });
+    return () => {
+      document.removeEventListener('click', onInteraction);
+      document.removeEventListener('keydown', onInteraction);
+    };
+  }, []);
+
+  useEffect(() => {
     const globalVol = volume / 100;
     const activeAudioIds = new Set<string>();
     const activeVideoIds = new Set<string>();
@@ -240,9 +251,16 @@ const PreviewPanel = () => {
           if (Math.abs(video.currentTime - clipOffset) > 0.5) {
             video.currentTime = clipOffset;
           }
-          video.volume = clip.trackMuted ? 0 : Math.min(1, clip.clipVolume * globalVol);
+          const wantMuted = clip.trackMuted || !userInteracted.current;
+          video.muted = wantMuted;
+          video.volume = wantMuted ? 0 : Math.min(1, clip.clipVolume * globalVol);
           if (isPlaying && video.paused) {
-            video.play().catch(() => {});
+            video.play().then(() => {
+              if (userInteracted.current && !clip.trackMuted) {
+                video.muted = false;
+                video.volume = Math.min(1, clip.clipVolume * globalVol);
+              }
+            }).catch(() => {});
           }
         }
       }
@@ -349,14 +367,17 @@ const PreviewPanel = () => {
         >
           <video
             ref={(el) => {
-              if (el) videoRefs.current.set(clip.id, el);
-              else videoRefs.current.delete(clip.id);
+              if (el) {
+                videoRefs.current.set(clip.id, el);
+                el.muted = clip.trackMuted || !userInteracted.current;
+              } else {
+                videoRefs.current.delete(clip.id);
+              }
             }}
             src={clip.assetUrl}
             className="w-full h-full object-contain"
             style={{ background: '#0a0a0f' }}
             playsInline
-            muted={clip.trackMuted}
           />
         </div>
       );
@@ -499,7 +520,7 @@ const PreviewPanel = () => {
           <button onClick={jumpStart} className="nle-button"><Icon name="SkipBack" size={12} /></button>
           <button onClick={frameBack} className="nle-button"><Icon name="ChevronLeft" size={12} /></button>
           <button onClick={skipBack} className="nle-button"><Icon name="Rewind" size={12} /></button>
-          <button onClick={togglePlay} className={`nle-button ${isPlaying ? 'active' : ''}`} style={{ padding: '4px 10px' }}>
+          <button onClick={() => { userInteracted.current = true; togglePlay(); }} className={`nle-button ${isPlaying ? 'active' : ''}`} style={{ padding: '4px 10px' }}>
             <Icon name={isPlaying ? 'Pause' : 'Play'} size={16} />
           </button>
           <button onClick={skipForward} className="nle-button"><Icon name="FastForward" size={12} /></button>
