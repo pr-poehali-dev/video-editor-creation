@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
 import useAuth from '@/hooks/use-auth';
-import { wallet, projects } from '@/lib/api';
+import { wallet, projects, media } from '@/lib/api';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -64,6 +64,7 @@ const Dashboard = () => {
   const [topupAmount, setTopupAmount] = useState('');
   const [editName, setEditName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [mediaFiles, setMediaFiles] = useState<Array<{id: number; file_name: string; file_type: string; mime_type: string; file_size: number; duration: number; width: number; height: number; cdn_url: string; created_at: string}>>([]);
 
   useEffect(() => {
     loadProfile().then(() => {
@@ -85,16 +86,19 @@ const Dashboard = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [projRes, txRes, purRes, balRes] = await Promise.all([
+      const [projRes, txRes, purRes, balRes, mediaRes] = await Promise.all([
         projects.list(),
         wallet.transactions(),
         wallet.purchases(),
         wallet.balance(),
+        media.list(),
       ]);
       setMyProjects(projRes.projects || []);
       setTransactions(txRes.items || []);
       setPurchases(purRes.items || []);
       setBalance(balRes.balance || 0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setMediaFiles((mediaRes as any).files || []);
     } catch {}
     setLoading(false);
   };
@@ -201,6 +205,9 @@ const Dashboard = () => {
             </TabsTrigger>
             <TabsTrigger value="purchases" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
               <Icon name="ShoppingBag" size={12} className="mr-1.5" /> Покупки
+            </TabsTrigger>
+            <TabsTrigger value="media" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
+              <Icon name="Image" size={12} className="mr-1.5" /> Медиа ({mediaFiles.length})
             </TabsTrigger>
             <TabsTrigger value="profile" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
               <Icon name="User" size={12} className="mr-1.5" /> Профиль
@@ -336,6 +343,49 @@ const Dashboard = () => {
                         </div>
                       </div>
                       <span className="text-sm font-semibold">{p.price.toFixed(2)} ₽</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="media">
+            <div className="editor-panel rounded-xl p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold flex items-center gap-2">
+                  <Icon name="Image" size={16} /> Все загруженные файлы
+                </h2>
+                <span className="text-xs text-muted-foreground">{mediaFiles.length} файлов</span>
+              </div>
+              {mediaFiles.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Icon name="Image" size={48} className="mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">Нет загруженных файлов</p>
+                  <p className="text-xs mt-1">Загрузите медиа-файлы в редакторе проекта</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {mediaFiles.map(f => (
+                    <div key={f.id} className="rounded-lg overflow-hidden group" style={{ background: 'hsl(var(--editor-bg))' }}>
+                      <div className="aspect-video flex items-center justify-center relative" style={{ background: 'hsl(var(--editor-panel-header))' }}>
+                        {f.file_type === 'image' ? (
+                          <img src={f.cdn_url} alt={f.file_name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Icon name={f.file_type === 'audio' ? 'Music' : 'Film'} size={28} className="text-muted-foreground/40" />
+                        )}
+                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-black/60 text-white">
+                          {f.file_type === 'image' ? 'Фото' : f.file_type === 'audio' ? 'Аудио' : 'Видео'}
+                        </div>
+                      </div>
+                      <div className="p-2">
+                        <div className="text-[11px] font-medium truncate">{f.file_name}</div>
+                        <div className="text-[9px] text-muted-foreground mt-0.5">
+                          {f.file_size > 1e6 ? (f.file_size / 1e6).toFixed(1) + ' МБ' : (f.file_size / 1e3).toFixed(0) + ' КБ'}
+                          {f.duration > 0 && ` • ${Math.floor(f.duration / 60)}:${Math.floor(f.duration % 60).toString().padStart(2, '0')}`}
+                          {' • '}{new Date(f.created_at).toLocaleDateString('ru-RU')}
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>

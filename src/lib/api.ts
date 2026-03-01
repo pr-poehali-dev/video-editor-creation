@@ -108,6 +108,10 @@ export const media = {
     request(urls.media, `/list${project_id ? `?project_id=${project_id}` : ''}`),
   remove: (id: number) =>
     request(urls.media, '/delete', { method: 'POST', body: JSON.stringify({ id }) }),
+  proxyUrl: (id: number) => {
+    const token = getToken();
+    return `${urls.media}?route=${encodeURIComponent('/proxy')}&id=${id}&token=${token}`;
+  },
 };
 
 export default { auth, wallet, projects, admin, shop, media };

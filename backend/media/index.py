@@ -65,6 +65,17 @@ def handler(event, context):
     token = (event.get('headers') or {}).get('X-Auth-Token', '')
 
     conn = get_db()
+
+    if route == '/proxy' and method == 'GET':
+        proxy_token = qs.get('token', '') or token
+        user = get_user_by_token(conn, proxy_token)
+        if not user:
+            conn.close()
+            return err('Необходима авторизация', 401)
+        result = handle_proxy(conn, user, qs)
+        conn.close()
+        return result
+
     user = get_user_by_token(conn, token)
     if not user:
         conn.close()
@@ -200,3 +211,33 @@ def handle_delete(conn, user, event):
     conn.commit()
     cur.close()
     return ok({'deleted': True})
+
+
+def handle_proxy(conn, user, qs):
+    file_id = qs.get('id')
+    if not file_id:
+        return err('id обязателен')
+
+    cur = conn.cursor()
+    cur.execute("SELECT s3_key, mime_type FROM media_files WHERE id = %s AND user_id = %s AND s3_key != 'deleted'", (int(file_id), user['id']))
+    row = cur.fetchone()
+    cur.close()
+    if not row:
+        return err('Файл не найден', 404)
+
+    s3_key, mime_type = row
+    s3 = get_s3()
+    obj = s3.get_object(Bucket='files', Key=s3_key)
+    data = obj['Body'].read()
+    b64_data = base64.b64encode(data).decode('utf-8')
+
+    return {
+        'statusCode': 200,
+        'headers': {
+            **CORS,
+            'Content-Type': mime_type,
+            'Cache-Control': 'public, max-age=86400',
+        },
+        'body': b64_data,
+        'isBase64Encoded': True,
+    }

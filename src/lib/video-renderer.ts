@@ -3,6 +3,7 @@ import type {
   MediaAsset,
   ExportSettings,
 } from "@/types/editor";
+import { media as mediaApi } from "@/lib/api";
 
 type ProgressCallback = (progress: number, stage: string) => void;
 
@@ -91,13 +92,15 @@ export class VideoRenderer {
 
       report(loadedCount / Math.max(assetsToLoad.size, 1) * 0.2, `Loading ${asset.name}`);
 
+      const resolvedUrl = this.resolveAssetUrl(assetId, asset.url);
+
       if (asset.type === "image") {
-        const img = await this.loadImage(asset.url);
+        const img = await this.loadImage(resolvedUrl);
         imageCache.set(assetId, img);
       } else if (asset.type === "audio") {
-        audioBuffers.set(assetId, { element: new Audio(), url: asset.url });
+        audioBuffers.set(assetId, { element: new Audio(), url: resolvedUrl });
       } else if (asset.type === "video") {
-        const img = await this.loadImage(asset.url).catch(() => null);
+        const img = await this.loadImage(resolvedUrl).catch(() => null);
         if (img) imageCache.set(assetId, img);
       }
 
@@ -134,9 +137,11 @@ export class VideoRenderer {
 
       const audioEl = new Audio();
       audioEl.crossOrigin = "anonymous";
-      audioEl.src = asset.url;
       audioEl.preload = "auto";
       audioEl.volume = 0;
+
+      const audioSrc = this.resolveAssetUrl(ac.assetId!, asset.url);
+      audioEl.src = audioSrc;
 
       await new Promise<void>((resolve) => {
         audioEl.addEventListener("canplaythrough", () => resolve(), { once: true });
@@ -314,6 +319,16 @@ export class VideoRenderer {
       }
     }
     return result.sort((a, b) => a.startTime - b.startTime);
+  }
+
+  private resolveAssetUrl(assetId: string, originalUrl: string): string {
+    if (assetId.startsWith("server_")) {
+      const serverId = parseInt(assetId.replace("server_", ""), 10);
+      if (!isNaN(serverId)) {
+        return mediaApi.proxyUrl(serverId);
+      }
+    }
+    return originalUrl;
   }
 
   private loadImage(url: string): Promise<HTMLImageElement> {
