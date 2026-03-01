@@ -5,6 +5,8 @@ import useAuth from '@/hooks/use-auth';
 import { media as mediaApi, shop } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface ShopPurchase {
   slug: string;
@@ -124,6 +126,10 @@ const MediaPanel = () => {
   const [loadedProjectId, setLoadedProjectId] = useState<number | null>(null);
   const [purchases, setPurchases] = useState<ShopPurchase[]>([]);
   const [purchasesLoaded, setPurchasesLoaded] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [libraryFiles, setLibraryFiles] = useState<Array<{id: number; file_name: string; file_type: string; mime_type: string; file_size: number; duration: number; width: number; height: number; cdn_url: string; created_at: string}>>([]);
+  const [libraryLoading, setLibraryLoading] = useState(false);
+  const [libraryFilter, setLibraryFilter] = useState<'all' | 'video' | 'audio' | 'image'>('all');
 
   useEffect(() => {
     if (!isAuthenticated || !project.id) return;
@@ -254,6 +260,42 @@ const MediaPanel = () => {
     removeAsset(assetId);
   }, [removeAsset]);
 
+  const handleOpenLibrary = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setLibraryOpen(true);
+    setLibraryLoading(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: any = await mediaApi.list();
+      if (data.files) setLibraryFiles(data.files);
+    } catch {
+      setLibraryFiles([]);
+    } finally {
+      setLibraryLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  const handleAddFromLibrary = useCallback((file: typeof libraryFiles[0]) => {
+    const existing = useEditorStore.getState().assets;
+    if (existing.some(a => a.id === `server_${file.id}`)) return;
+    addAsset({
+      name: file.file_name,
+      type: file.file_type as 'video' | 'audio' | 'image',
+      url: file.cdn_url,
+      duration: file.duration || 0,
+      size: file.file_size,
+      width: file.width,
+      height: file.height,
+    });
+    const lastAsset = useEditorStore.getState().assets;
+    const added = lastAsset[lastAsset.length - 1];
+    if (added) {
+      useEditorStore.setState((s) => ({
+        assets: s.assets.map(a => a.id === added.id ? { ...a, id: `server_${file.id}` } : a)
+      }));
+    }
+  }, [addAsset]);
+
   const handleApplyEffect = useCallback((effectName: string) => {
     if (!selectedClipId) return;
     const state = useEditorStore.getState();
@@ -332,10 +374,34 @@ const MediaPanel = () => {
           onDrop={handleFileDrop}
         >
           <div className="px-2 py-1.5">
-            <button onClick={handleImport} className={`w-full flex items-center justify-center gap-1.5 nle-button py-1.5 border border-dashed transition-colors ${isDraggingOver ? 'border-primary bg-primary/10' : 'border-border hover:border-primary'}`}>
-              <Icon name={uploading.length > 0 ? 'Loader2' : 'Plus'} size={12} className={uploading.length > 0 ? 'animate-spin' : ''} />
-              <span>{isDraggingOver ? 'Отпустите файлы сюда' : uploading.length > 0 ? `Загрузка (${uploading.length})...` : 'Импорт медиа'}</span>
-            </button>
+            {isDraggingOver || uploading.length > 0 ? (
+              <button onClick={handleImport} className={`w-full flex items-center justify-center gap-1.5 nle-button py-1.5 border border-dashed transition-colors ${isDraggingOver ? 'border-primary bg-primary/10' : 'border-border hover:border-primary'}`}>
+                <Icon name={uploading.length > 0 ? 'Loader2' : 'Plus'} size={12} className={uploading.length > 0 ? 'animate-spin' : ''} />
+                <span>{isDraggingOver ? 'Отпустите файлы сюда' : `Загрузка (${uploading.length})...`}</span>
+              </button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="w-full flex items-center justify-center gap-1.5 nle-button py-1.5 border border-dashed transition-colors border-border hover:border-primary">
+                    <Icon name="Plus" size={12} />
+                    <span>Импорт медиа</span>
+                    <Icon name="ChevronDown" size={10} className="ml-auto opacity-50" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[200px]">
+                  <DropdownMenuItem onClick={handleImport} className="gap-2 cursor-pointer">
+                    <Icon name="HardDrive" size={14} />
+                    <span>С компьютера</span>
+                  </DropdownMenuItem>
+                  {isAuthenticated && (
+                    <DropdownMenuItem onClick={handleOpenLibrary} className="gap-2 cursor-pointer">
+                      <Icon name="Cloud" size={14} />
+                      <span>Из моих файлов</span>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <input ref={fileInputRef} type="file" accept="video/*,audio/*,image/*" multiple onChange={handleFileChange} className="hidden" />
           </div>
           <ScrollArea className="flex-1 px-2 editor-scrollbar">
@@ -584,6 +650,76 @@ const MediaPanel = () => {
           </ScrollArea>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={libraryOpen} onOpenChange={setLibraryOpen}>
+        <DialogContent className="max-w-lg max-h-[70vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-sm flex items-center gap-2">
+              <Icon name="Cloud" size={16} />
+              Мои файлы
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex gap-1 mb-2">
+            {(['all', 'image', 'video', 'audio'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setLibraryFilter(f)}
+                className={`text-[10px] px-2 py-1 rounded transition-colors ${libraryFilter === f ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 hover:bg-secondary'}`}
+              >
+                {f === 'all' ? 'Все' : f === 'image' ? 'Фото' : f === 'video' ? 'Видео' : 'Аудио'}
+              </button>
+            ))}
+          </div>
+
+          <ScrollArea className="flex-1 min-h-0">
+            {libraryLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Icon name="Loader2" size={20} className="animate-spin text-muted-foreground" />
+              </div>
+            ) : libraryFiles.filter(f => libraryFilter === 'all' || f.file_type === libraryFilter).length === 0 ? (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                {libraryFiles.length === 0 ? 'У вас пока нет загруженных файлов' : 'Нет файлов этого типа'}
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-2 pr-3">
+                {libraryFiles
+                  .filter(f => libraryFilter === 'all' || f.file_type === libraryFilter)
+                  .map(file => {
+                    const alreadyAdded = assets.some(a => a.id === `server_${file.id}`);
+                    return (
+                      <div
+                        key={file.id}
+                        onClick={() => !alreadyAdded && handleAddFromLibrary(file)}
+                        className={`relative rounded p-1.5 transition-colors ${alreadyAdded ? 'bg-primary/10 opacity-60 cursor-default' : 'bg-secondary/50 hover:bg-secondary cursor-pointer'}`}
+                      >
+                        <div className="aspect-video rounded flex items-center justify-center mb-1 overflow-hidden" style={{ background: 'hsl(var(--editor-bg))' }}>
+                          {file.file_type === 'image' ? (
+                            <img src={file.cdn_url} alt={file.file_name} className="w-full h-full object-cover" />
+                          ) : file.file_type === 'video' ? (
+                            <video src={file.cdn_url} className="w-full h-full object-cover" muted />
+                          ) : (
+                            <Icon name={typeIcon(file.file_type)} size={20} className={typeColor(file.file_type)} />
+                          )}
+                          {alreadyAdded && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Icon name="Check" size={16} className="text-primary" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-[10px] truncate">{file.file_name}</div>
+                        <div className="text-[9px] text-muted-foreground flex justify-between">
+                          <span>{file.duration > 0 ? formatDuration(file.duration) : '—'}</span>
+                          <span>{formatSize(file.file_size)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
