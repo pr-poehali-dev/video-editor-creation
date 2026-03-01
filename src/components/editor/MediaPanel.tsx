@@ -296,6 +296,14 @@ const MediaPanel = () => {
     }
   }, [addAsset]);
 
+  const handleDeleteFromLibrary = useCallback(async (fileId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const serverId = `server_${fileId}`;
+    if (assets.some(a => a.id === serverId)) removeAsset(serverId);
+    setLibraryFiles(prev => prev.filter(f => f.id !== fileId));
+    mediaApi.remove(fileId).catch(() => {});
+  }, [assets, removeAsset]);
+
   const handleApplyEffect = useCallback((effectName: string) => {
     if (!selectedClipId) return;
     const state = useEditorStore.getState();
@@ -691,7 +699,7 @@ const MediaPanel = () => {
                       <div
                         key={file.id}
                         onClick={() => !alreadyAdded && handleAddFromLibrary(file)}
-                        className={`relative rounded p-1.5 transition-colors ${alreadyAdded ? 'bg-primary/10 opacity-60 cursor-default' : 'bg-secondary/50 hover:bg-secondary cursor-pointer'}`}
+                        className={`group relative rounded p-1.5 transition-colors ${alreadyAdded ? 'bg-primary/10 opacity-60 cursor-default' : 'bg-secondary/50 hover:bg-secondary cursor-pointer'}`}
                       >
                         <div className="aspect-video rounded flex items-center justify-center mb-1 overflow-hidden" style={{ background: 'hsl(var(--editor-bg))' }}>
                           {file.file_type === 'image' ? (
@@ -712,6 +720,12 @@ const MediaPanel = () => {
                           <span>{file.duration > 0 ? formatDuration(file.duration) : '—'}</span>
                           <span>{formatSize(file.file_size)}</span>
                         </div>
+                        <button
+                          onClick={(e) => handleDeleteFromLibrary(file.id, e)}
+                          className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full p-0.5"
+                        >
+                          <Icon name="X" size={8} />
+                        </button>
                       </div>
                     );
                   })}
