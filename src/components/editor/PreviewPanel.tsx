@@ -32,8 +32,10 @@ interface ActiveClip {
   startTime: number;
   trackType: string;
   trackVisible: boolean;
+  duration: number;
   trackMuted: boolean;
   filters: Array<{ name: string; type: string; params: Record<string, number | string | boolean> }>;
+  fadeOpacity: number;
 }
 
 const getFilterStyle = (filters: ActiveClip['filters'], previewFilter?: string | null): string => {
@@ -82,6 +84,8 @@ const PreviewPanel = () => {
   const lastTimeRef = useRef<number>(0);
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const scrubbing = useRef(false);
+  const progressBarRef = useRef<HTMLDivElement>(null);
 
   const assetMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -97,6 +101,14 @@ const PreviewPanel = () => {
       if (!track.visible) continue;
       for (const clip of track.clips) {
         if (currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration) {
+          let fadeOpacity = clip.opacity;
+          if (clip.duration > 0.2 && (clip.type === 'image' || clip.type === 'video')) {
+            const fadeDur = Math.min(0.5, clip.duration / 3);
+            const elapsed = currentTime - clip.startTime;
+            const remaining = clip.duration - elapsed;
+            if (elapsed < fadeDur) fadeOpacity = clip.opacity * (elapsed / fadeDur);
+            else if (remaining < fadeDur) fadeOpacity = clip.opacity * (remaining / fadeDur);
+          }
           clips.push({
             id: clip.id,
             type: clip.type,
@@ -109,10 +121,12 @@ const PreviewPanel = () => {
             opacity: clip.opacity,
             clipVolume: clip.volume,
             startTime: clip.startTime,
+            duration: clip.duration,
             trackType: track.type,
             trackVisible: track.visible,
             trackMuted: track.muted,
             filters: clip.filters || [],
+            fadeOpacity,
           });
         }
       }
@@ -245,11 +259,29 @@ const PreviewPanel = () => {
 
   const progressPercent = maxTime > 0 ? (currentTime / maxTime) * 100 : 0;
 
-  const handleProgressClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = (e.clientX - rect.left) / rect.width;
-    setCurrentTime(Math.max(0, pct * maxTime));
+  const handleProgressSeek = useCallback((clientX: number) => {
+    if (!progressBarRef.current) return;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    setCurrentTime(pct * maxTime);
   }, [maxTime, setCurrentTime]);
+
+  const handleProgressMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    scrubbing.current = true;
+    handleProgressSeek(e.clientX);
+
+    const onMove = (ev: MouseEvent) => {
+      if (scrubbing.current) handleProgressSeek(ev.clientX);
+    };
+    const onUp = () => {
+      scrubbing.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [handleProgressSeek]);
 
   const renderMediaClip = (clip: ActiveClip, i: number) => {
     const hasUrl = !!clip.assetUrl;
@@ -259,8 +291,8 @@ const PreviewPanel = () => {
       return (
         <div
           key={clip.id}
-          className="absolute inset-0"
-          style={{ opacity: clip.opacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview) }}
+          className="absolute inset-0 transition-opacity duration-100"
+          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview) }}
         >
           <img
             src={clip.assetUrl}
@@ -277,8 +309,8 @@ const PreviewPanel = () => {
       return (
         <div
           key={clip.id}
-          className="absolute inset-0"
-          style={{ opacity: clip.opacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview) }}
+          className="absolute inset-0 transition-opacity duration-100"
+          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview) }}
         >
           <video
             ref={(el) => {
@@ -411,17 +443,18 @@ const PreviewPanel = () => {
 
       <div className="px-3 pt-1">
         <div
-          className="h-1 rounded-full cursor-pointer group relative"
+          ref={progressBarRef}
+          className="h-2 rounded-full cursor-pointer group relative"
           style={{ background: 'hsl(var(--editor-bg))' }}
-          onClick={handleProgressClick}
+          onMouseDown={handleProgressMouseDown}
         >
           <div
-            className="h-full rounded-full transition-all"
+            className="h-full rounded-full"
             style={{ width: `${progressPercent}%`, background: 'hsl(var(--primary))' }}
           />
           <div
-            className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-            style={{ left: `calc(${progressPercent}% - 5px)` }}
+            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ left: `calc(${progressPercent}% - 6px)` }}
           />
         </div>
       </div>

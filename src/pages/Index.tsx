@@ -44,7 +44,7 @@ const Index = () => {
           setProject({ id: pid, name: p.name || 'Проект' });
           if (p.project_data && typeof p.project_data === 'object') {
             const pd = p.project_data;
-            if (pd.tracks) loadProjectData({ tracks: pd.tracks, project: pd.project, exportSettings: pd.exportSettings });
+            if (pd.tracks) loadProjectData({ tracks: pd.tracks, project: pd.project, exportSettings: pd.exportSettings, assets: pd.assets });
           }
         }
       }).catch(() => {});

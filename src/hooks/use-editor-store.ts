@@ -41,8 +41,8 @@ interface EditorStore extends EditorState {
   setPreviewFilter: (filter: string | null) => void;
   setProject: (project: Partial<EditorState['project']>) => void;
   resetEditor: (projectId?: number, projectName?: string) => void;
-  getProjectData: () => { tracks: Track[]; project: EditorState['project']; exportSettings: EditorState['exportSettings'] };
-  loadProjectData: (data: { tracks?: Track[]; project?: Partial<EditorState['project']>; exportSettings?: Partial<EditorState['exportSettings']> }) => void;
+  getProjectData: () => { tracks: Track[]; project: EditorState['project']; exportSettings: EditorState['exportSettings']; assets: MediaAsset[] };
+  loadProjectData: (data: { tracks?: Track[]; project?: Partial<EditorState['project']>; exportSettings?: Partial<EditorState['exportSettings']>; assets?: MediaAsset[] }) => void;
 }
 
 const defaultTracks: Track[] = [
@@ -306,11 +306,12 @@ const useEditorStore = create<EditorStore>((set, get) => ({
 
   getProjectData: () => {
     const s = get();
-    return { tracks: s.tracks, project: s.project, exportSettings: s.exportSettings };
+    return { tracks: s.tracks, project: s.project, exportSettings: s.exportSettings, assets: s.assets };
   },
 
   loadProjectData: (data) => set((state) => ({
     tracks: data.tracks || state.tracks,
+    assets: data.assets || state.assets,
     project: { ...state.project, ...(data.project || {}) },
     exportSettings: { ...state.exportSettings, ...(data.exportSettings || {}) },
     currentTime: 0,

@@ -41,11 +41,13 @@ const Toolbar = () => {
     setSaving(true);
     try {
       const data = getProjectData();
+      const persistableAssets = data.assets.filter(a => a.url && !a.url.startsWith('blob:'));
       await projects.save({
         id: project.id,
         name: data.project.name,
         project_data: {
           tracks: data.tracks,
+          assets: persistableAssets,
           project: { name: data.project.name, width: data.project.width, height: data.project.height, fps: data.project.fps, duration: data.project.duration },
           exportSettings: data.exportSettings,
         },

@@ -13,6 +13,8 @@ interface RenderResult {
   fileName: string;
 }
 
+const FADE_DURATION = 0.5;
+
 const QUALITY_MAP: Record<ExportSettings["quality"], { width: number; height: number; bitrate: number }> = {
   low: { width: 1280, height: 720, bitrate: 2_000_000 },
   medium: { width: 1920, height: 1080, bitrate: 5_000_000 },
@@ -214,10 +216,23 @@ export class VideoRenderer {
       for (const clip of clips) {
         if (currentTime < clip.startTime || currentTime >= clip.startTime + clip.duration) continue;
 
+        const elapsed = currentTime - clip.startTime;
+        const remaining = clip.duration - elapsed;
+        let fadeAlpha = clip.opacity;
+
+        if (clip.duration > 0.2 && (clip.type === "image" || clip.type === "video")) {
+          const fadeDur = Math.min(FADE_DURATION, clip.duration / 3);
+          if (elapsed < fadeDur) {
+            fadeAlpha = clip.opacity * (elapsed / fadeDur);
+          } else if (remaining < fadeDur) {
+            fadeAlpha = clip.opacity * (remaining / fadeDur);
+          }
+        }
+
         if ((clip.type === "image" || clip.type === "video") && clip.assetId) {
           const img = imageCache.get(clip.assetId);
           if (img) {
-            this.ctx.globalAlpha = clip.opacity;
+            this.ctx.globalAlpha = fadeAlpha;
             this.drawImageFit(img, width, height);
             this.ctx.globalAlpha = 1;
           }
