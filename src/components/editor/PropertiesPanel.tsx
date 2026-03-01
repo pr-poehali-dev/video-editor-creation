@@ -166,6 +166,59 @@ const PropertiesPanel = () => {
             </>
           )}
 
+          {selectedClip.filters && selectedClip.filters.length > 0 && (
+            <>
+              <Separator className="bg-border/50" />
+              <div className="space-y-2">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Эффекты</span>
+                {selectedClip.filters.map((f, idx) => (
+                  <div key={f.id || idx} className="flex items-center gap-2">
+                    <span className="text-[10px] flex-1">{f.name}</span>
+                    <Slider
+                      value={[typeof f.params?.intensity === 'number' ? f.params.intensity : 50]}
+                      onValueChange={([v]) => {
+                        const newFilters = [...selectedClip.filters];
+                        newFilters[idx] = { ...newFilters[idx], params: { ...newFilters[idx].params, intensity: v } };
+                        updateClip(selectedClip.id, { filters: newFilters });
+                      }}
+                      max={100}
+                      step={1}
+                      className="w-20"
+                    />
+                    <button
+                      onClick={() => {
+                        updateClip(selectedClip.id, { filters: selectedClip.filters.filter((_, i) => i !== idx) });
+                      }}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <Icon name="X" size={10} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {selectedClip.transition && (
+            <>
+              <Separator className="bg-border/50" />
+              <div className="space-y-2">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Переход</span>
+                <div className="flex items-center gap-2">
+                  <Icon name="Sparkles" size={10} className="text-primary" />
+                  <span className="text-[10px] flex-1 capitalize">{selectedClip.transition.type}</span>
+                  <span className="text-[9px] text-muted-foreground">{selectedClip.transition.duration}с</span>
+                  <button
+                    onClick={() => updateClip(selectedClip.id, { transition: undefined })}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Icon name="X" size={10} />
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
           <Separator className="bg-border/50" />
 
           <div className="space-y-1">

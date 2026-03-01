@@ -22,6 +22,16 @@ const QUALITY_MAP: Record<ExportSettings["quality"], { width: number; height: nu
   ultra: { width: 1920, height: 1080, bitrate: 12_000_000 },
 };
 
+interface ClipFilter {
+  name: string;
+  params: Record<string, number | string | boolean>;
+}
+
+interface ClipTransition {
+  type: string;
+  duration: number;
+}
+
 interface ClipInfo {
   assetId?: string;
   type: string;
@@ -34,6 +44,8 @@ interface ClipInfo {
   fontSize?: number;
   fontColor?: string;
   trackMuted: boolean;
+  filters: ClipFilter[];
+  transition?: ClipTransition;
 }
 
 export class VideoRenderer {
@@ -229,16 +241,25 @@ export class VideoRenderer {
           }
         }
 
+        if (clip.transition && clip.transition.duration > 0 && elapsed < clip.transition.duration) {
+          const tProg = elapsed / clip.transition.duration;
+          fadeAlpha = this.applyTransitionAlpha(clip.transition.type, tProg, fadeAlpha);
+        }
+
         if ((clip.type === "image" || clip.type === "video") && clip.assetId) {
           const img = imageCache.get(clip.assetId);
           if (img) {
+            this.ctx.save();
             this.ctx.globalAlpha = fadeAlpha;
+            this.applyCanvasFilters(clip.filters, width, height);
+            this.applyTransitionTransform(clip.transition, elapsed, width, height);
             this.drawImageFit(img, width, height);
-            this.ctx.globalAlpha = 1;
+            this.ctx.restore();
           }
         }
 
         if (clip.type === "text") {
+          this.ctx.save();
           this.ctx.globalAlpha = clip.opacity;
           const fontSize = Math.round((clip.fontSize || 48) * (height / 1080));
           this.ctx.font = `bold ${fontSize}px sans-serif`;
@@ -248,8 +269,7 @@ export class VideoRenderer {
           this.ctx.shadowColor = "rgba(0,0,0,0.7)";
           this.ctx.shadowBlur = 8;
           this.ctx.fillText(clip.text || clip.name, width / 2, height / 2);
-          this.ctx.shadowBlur = 0;
-          this.ctx.globalAlpha = 1;
+          this.ctx.restore();
         }
       }
 
@@ -332,6 +352,8 @@ export class VideoRenderer {
           fontSize: clip.fontSize,
           fontColor: clip.fontColor,
           trackMuted: track.muted,
+          filters: (clip.filters || []).map(f => ({ name: f.name, params: f.params })),
+          transition: clip.transition,
         });
       }
     }
@@ -377,6 +399,109 @@ export class VideoRenderer {
     }
 
     this.ctx.drawImage(img, drawX, drawY, drawW, drawH);
+  }
+
+  private applyCanvasFilters(filters: ClipFilter[], _w: number, _h: number) {
+    if (!this.ctx || !filters || filters.length === 0) return;
+    const parts: string[] = [];
+    for (const f of filters) {
+      const intensity = typeof f.params?.intensity === "number" ? f.params.intensity : 50;
+      const norm = intensity / 100;
+      switch (f.name) {
+        case "Яркость": parts.push(`brightness(${0.5 + norm})`); break;
+        case "Контраст": parts.push(`contrast(${0.5 + norm})`); break;
+        case "Насыщенность": parts.push(`saturate(${norm * 2})`); break;
+        case "Температура": parts.push(`sepia(${norm * 0.5}) saturate(${1 + norm * 0.3})`); break;
+        case "Размытие": parts.push(`blur(${norm * 8}px)`); break;
+        case "Резкость": parts.push(`contrast(${1 + norm * 0.3})`); break;
+        case "Шум": parts.push(`contrast(${1 + norm * 0.1}) brightness(${1 - norm * 0.05})`); break;
+        case "Глитч": parts.push(`hue-rotate(${norm * 90}deg) saturate(${1.5 + norm})`); break;
+        case "Тёплый": parts.push("sepia(0.35) saturate(1.3) brightness(1.05)"); break;
+        case "Холодный": parts.push("saturate(0.9) brightness(1.05) hue-rotate(15deg)"); break;
+        case "Сепия": parts.push("sepia(0.8)"); break;
+        case "Ч/Б": parts.push("grayscale(1)"); break;
+        case "Негатив": parts.push("invert(1)"); break;
+        case "Ретро": parts.push("sepia(0.4) contrast(1.1) brightness(0.95) saturate(0.85)"); break;
+        case "Кинематограф": parts.push("contrast(1.2) saturate(0.85) brightness(0.95)"); break;
+        case "Блёклый": parts.push("contrast(0.85) brightness(1.1) saturate(0.7)"); break;
+        case "Высокий контраст": parts.push("contrast(1.5) saturate(1.2)"); break;
+        case "Мягкий свет": parts.push("brightness(1.1) contrast(0.9) saturate(1.1)"); break;
+        case "Зернистость": parts.push("contrast(1.05) brightness(0.97)"); break;
+        case "Хроматическая аберрация": parts.push("saturate(1.3) contrast(1.1)"); break;
+        case "Двойная экспозиция": parts.push("brightness(1.2) contrast(0.85)"); break;
+        case "Глитч-наложение": parts.push(`hue-rotate(${norm * 120}deg) saturate(1.8) contrast(1.15)`); break;
+        default: break;
+      }
+    }
+    if (parts.length > 0) {
+      this.ctx.filter = parts.join(" ");
+    }
+  }
+
+  private applyTransitionAlpha(type: string, progress: number, baseAlpha: number): number {
+    const t = Math.max(0, Math.min(1, progress));
+    switch (type) {
+      case "растворение": return baseAlpha * t;
+      case "затемнение": return baseAlpha * t;
+      case "засветка": return baseAlpha * t;
+      case "масштаб": return baseAlpha * t;
+      case "вспышка": return baseAlpha * (t < 0.5 ? t * 2 : 1);
+      default: return baseAlpha * t;
+    }
+  }
+
+  private applyTransitionTransform(
+    transition: ClipTransition | undefined,
+    elapsed: number,
+    w: number,
+    h: number
+  ) {
+    if (!this.ctx || !transition || transition.duration <= 0) return;
+    if (elapsed >= transition.duration) return;
+
+    const t = Math.max(0, Math.min(1, elapsed / transition.duration));
+    const eased = t * t * (3 - 2 * t);
+
+    switch (transition.type) {
+      case "слайд влево":
+        this.ctx.translate(w * (1 - eased), 0);
+        break;
+      case "слайд вправо":
+        this.ctx.translate(-w * (1 - eased), 0);
+        break;
+      case "слайд вверх":
+        this.ctx.translate(0, h * (1 - eased));
+        break;
+      case "слайд вниз":
+        this.ctx.translate(0, -h * (1 - eased));
+        break;
+      case "масштаб": {
+        const scale = 0.3 + 0.7 * eased;
+        this.ctx.translate(w / 2, h / 2);
+        this.ctx.scale(scale, scale);
+        this.ctx.translate(-w / 2, -h / 2);
+        break;
+      }
+      case "поворот": {
+        const angle = (1 - eased) * Math.PI * 0.5;
+        this.ctx.translate(w / 2, h / 2);
+        this.ctx.rotate(angle);
+        this.ctx.scale(eased, eased);
+        this.ctx.translate(-w / 2, -h / 2);
+        break;
+      }
+      case "пиксели": {
+        if (eased < 0.8) {
+          const pixelSize = Math.max(1, Math.round((1 - eased / 0.8) * 20));
+          this.ctx.imageSmoothingEnabled = false;
+          this.ctx.scale(1 / pixelSize, 1 / pixelSize);
+          this.ctx.scale(pixelSize, pixelSize);
+        }
+        break;
+      }
+      default:
+        break;
+    }
   }
 }
 

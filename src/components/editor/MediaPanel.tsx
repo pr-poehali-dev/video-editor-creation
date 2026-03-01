@@ -20,10 +20,14 @@ const baseEffects = [
     { name: 'Яркость', icon: 'Sun', free: true },
     { name: 'Контраст', icon: 'Contrast', free: true },
     { name: 'Насыщенность', icon: 'Palette', free: true },
+    { name: 'Температура', icon: 'Thermometer', free: true },
   ]},
   { category: 'Стилизация', items: [
     { name: 'Размытие', icon: 'Droplets', free: true },
+    { name: 'Резкость', icon: 'Focus', free: true },
     { name: 'Виньетка', icon: 'Circle', free: true },
+    { name: 'Шум', icon: 'Waves', free: true },
+    { name: 'Глитч', icon: 'Zap', free: true },
   ]},
 ];
 
@@ -31,13 +35,19 @@ const baseTransitions = [
   { name: 'Растворение', icon: 'Blend', duration: '0.5с', free: true },
   { name: 'Слайд влево', icon: 'ArrowLeft', duration: '0.5с', free: true },
   { name: 'Слайд вправо', icon: 'ArrowRight', duration: '0.5с', free: true },
+  { name: 'Слайд вверх', icon: 'ArrowUp', duration: '0.5с', free: true },
+  { name: 'Слайд вниз', icon: 'ArrowDown', duration: '0.5с', free: true },
   { name: 'Масштаб', icon: 'ZoomIn', duration: '0.7с', free: true },
+  { name: 'Затемнение', icon: 'Moon', duration: '0.8с', free: true },
+  { name: 'Засветка', icon: 'Sun', duration: '0.6с', free: true },
 ];
 
 const baseTextPresets = [
   { name: 'Заголовок', icon: 'Type', desc: 'Крупный текст по центру', free: true },
   { name: 'Субтитры', icon: 'Subtitles', desc: 'Текст внизу экрана', free: true },
   { name: 'Нижняя третья', icon: 'PanelBottom', desc: 'Плашка с именем', free: true },
+  { name: 'Титры', icon: 'ScrollText', desc: 'Конечные титры', free: true },
+  { name: 'Выноска', icon: 'MessageSquare', desc: 'Всплывающая подпись', free: true },
 ];
 
 const formatSize = (bytes: number): string => {
