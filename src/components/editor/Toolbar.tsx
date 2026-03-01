@@ -42,11 +42,16 @@ const Toolbar = () => {
     try {
       const data = getProjectData();
       const persistableAssets = data.assets.filter(a => a.url && !a.url.startsWith('blob:'));
+      const validAssetIds = new Set(persistableAssets.map(a => a.id));
+      const cleanTracks = data.tracks.map(t => ({
+        ...t,
+        clips: t.clips.filter(c => !c.assetId || validAssetIds.has(c.assetId)),
+      }));
       await projects.save({
         id: project.id,
         name: data.project.name,
         project_data: {
-          tracks: data.tracks,
+          tracks: cleanTracks,
           assets: persistableAssets,
           project: { name: data.project.name, width: data.project.width, height: data.project.height, fps: data.project.fps, duration: data.project.duration },
           exportSettings: data.exportSettings,

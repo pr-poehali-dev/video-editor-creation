@@ -95,7 +95,7 @@ const PreviewPanel = () => {
 
   const [volume, setVolume] = useState(80);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [soundBlocked, setSoundBlocked] = useState(false);
+  const [soundUnlocked, setSoundUnlocked] = useState(false);
   const [loadErrors, setLoadErrors] = useState<Set<string>>(new Set());
   const previewRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number>(0);
@@ -104,7 +104,6 @@ const PreviewPanel = () => {
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const scrubbing = useRef(false);
   const progressBarRef = useRef<HTMLDivElement>(null);
-  const userInteracted = useRef(false);
 
   const assetMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -211,23 +210,13 @@ const PreviewPanel = () => {
     };
   }, [isPlaying, maxTime]);
 
-  useEffect(() => {
-    const onInteraction = () => {
-      userInteracted.current = true;
-      setSoundBlocked(false);
-      videoRefs.current.forEach(v => {
-        if (v.muted && !v.dataset.trackMuted) {
-          v.muted = false;
-        }
-      });
-    };
-    document.addEventListener('click', onInteraction, { once: true });
-    document.addEventListener('keydown', onInteraction, { once: true });
-    return () => {
-      document.removeEventListener('click', onInteraction);
-      document.removeEventListener('keydown', onInteraction);
-    };
-  }, []);
+  const unlockSound = useCallback(() => {
+    if (soundUnlocked) return;
+    setSoundUnlocked(true);
+    videoRefs.current.forEach(v => {
+      if (!v.dataset.trackMuted) v.muted = false;
+    });
+  }, [soundUnlocked]);
 
   useEffect(() => {
     const globalVol = volume / 100;
@@ -235,7 +224,7 @@ const PreviewPanel = () => {
     const activeVideoIds = new Set<string>();
 
     for (const clip of activeClips) {
-      if (clip.type === 'audio' && !clip.trackMuted && clip.assetUrl) {
+      if (clip.type === 'audio' && !clip.trackMuted && clip.assetUrl && soundUnlocked) {
         activeAudioIds.add(clip.id);
         let audio = audioRefs.current.get(clip.id);
         if (!audio) {
@@ -262,18 +251,11 @@ const PreviewPanel = () => {
           if (Math.abs(video.currentTime - clipOffset) > 0.5) {
             video.currentTime = clipOffset;
           }
-          const wantMuted = clip.trackMuted || !userInteracted.current;
+          const wantMuted = clip.trackMuted || !soundUnlocked;
           video.muted = wantMuted;
           video.volume = wantMuted ? 0 : Math.min(1, clip.clipVolume * globalVol);
           if (isPlaying && video.paused) {
-            video.play().then(() => {
-              if (userInteracted.current && !clip.trackMuted) {
-                video.muted = false;
-                video.volume = Math.min(1, clip.clipVolume * globalVol);
-              }
-            }).catch(() => {
-              if (!userInteracted.current) setSoundBlocked(true);
-            });
+            video.play().catch(() => {});
           }
         }
       }
@@ -291,7 +273,7 @@ const PreviewPanel = () => {
         video.pause();
       }
     });
-  }, [activeClips, isPlaying, currentTime, volume]);
+  }, [activeClips, isPlaying, currentTime, volume, soundUnlocked]);
 
   useEffect(() => {
     return () => {
@@ -401,7 +383,7 @@ const PreviewPanel = () => {
             ref={(el) => {
               if (el) {
                 videoRefs.current.set(clip.id, el);
-                el.muted = clip.trackMuted || !userInteracted.current;
+                el.muted = clip.trackMuted || !soundUnlocked;
               } else {
                 videoRefs.current.delete(clip.id);
               }
@@ -416,6 +398,7 @@ const PreviewPanel = () => {
       );
     }
 
+    const isMissing = clip.assetId && !clip.assetUrl;
     return (
       <div
         key={clip.id}
@@ -424,13 +407,14 @@ const PreviewPanel = () => {
       >
         <div
           className="w-full h-full flex items-center justify-center"
-          style={{ background: clipColors[clip.type] || 'transparent' }}
+          style={{ background: isMissing ? 'rgba(220,38,38,0.15)' : (clipColors[clip.type] || 'transparent') }}
         >
           <div className="flex flex-col items-center gap-1">
             <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
-              <Icon name={clip.type === 'video' ? 'Film' : 'Image'} size={24} className="text-white/60" />
+              <Icon name={isMissing ? 'FileWarning' : clip.type === 'video' ? 'Film' : 'Image'} size={24} className={isMissing ? 'text-red-400' : 'text-white/60'} />
             </div>
-            <span className="text-[11px] text-white/70 font-medium">{clip.name}</span>
+            <span className={`text-[11px] font-medium ${isMissing ? 'text-red-400' : 'text-white/70'}`}>{isMissing ? 'Файл не найден' : clip.name}</span>
+            {isMissing && <span className="text-[9px] text-muted-foreground">{clip.name}</span>}
           </div>
         </div>
       </div>
@@ -507,10 +491,10 @@ const PreviewPanel = () => {
             )}
           </div>
 
-          {soundBlocked && (
+          {!soundUnlocked && tracks.some(t => t.clips.some(c => c.type === 'video' || c.type === 'audio')) && (
             <button
-              onClick={() => { userInteracted.current = true; setSoundBlocked(false); videoRefs.current.forEach(v => { if (!v.dataset.trackMuted) v.muted = false; }); }}
-              className="absolute top-2 right-2 z-50 flex items-center gap-1.5 bg-yellow-500/90 hover:bg-yellow-500 text-black text-[10px] font-semibold px-2.5 py-1 rounded-md cursor-pointer transition-colors"
+              onClick={unlockSound}
+              className="absolute top-2 right-2 z-50 flex items-center gap-1.5 bg-yellow-500/90 hover:bg-yellow-500 text-black text-[10px] font-semibold px-2.5 py-1 rounded-md cursor-pointer transition-colors animate-pulse"
             >
               <Icon name="VolumeX" size={12} />
               Включить звук
@@ -563,7 +547,7 @@ const PreviewPanel = () => {
           <button onClick={jumpStart} className="nle-button"><Icon name="SkipBack" size={12} /></button>
           <button onClick={frameBack} className="nle-button"><Icon name="ChevronLeft" size={12} /></button>
           <button onClick={skipBack} className="nle-button"><Icon name="Rewind" size={12} /></button>
-          <button onClick={() => { userInteracted.current = true; togglePlay(); }} className={`nle-button ${isPlaying ? 'active' : ''}`} style={{ padding: '4px 10px' }}>
+          <button onClick={() => { unlockSound(); togglePlay(); }} className={`nle-button ${isPlaying ? 'active' : ''}`} style={{ padding: '4px 10px' }}>
             <Icon name={isPlaying ? 'Pause' : 'Play'} size={16} />
           </button>
           <button onClick={skipForward} className="nle-button"><Icon name="FastForward" size={12} /></button>
