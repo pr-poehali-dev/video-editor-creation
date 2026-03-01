@@ -36,6 +36,7 @@ interface ActiveClip {
   trackMuted: boolean;
   filters: Array<{ name: string; type: string; params: Record<string, number | string | boolean> }>;
   fadeOpacity: number;
+  transitionStyle: string;
 }
 
 const getFilterStyle = (filters: ActiveClip['filters'], previewFilter?: string | null): string => {
@@ -116,14 +117,32 @@ const PreviewPanel = () => {
       if (!track.visible) continue;
       for (const clip of track.clips) {
         if (currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration) {
+          const elapsed = currentTime - clip.startTime;
+          const remaining = clip.duration - elapsed;
           let fadeOpacity = clip.opacity;
           if (clip.duration > 0.2 && (clip.type === 'image' || clip.type === 'video')) {
             const fadeDur = Math.min(0.5, clip.duration / 3);
-            const elapsed = currentTime - clip.startTime;
-            const remaining = clip.duration - elapsed;
             if (elapsed < fadeDur) fadeOpacity = clip.opacity * (elapsed / fadeDur);
             else if (remaining < fadeDur) fadeOpacity = clip.opacity * (remaining / fadeDur);
           }
+
+          let transitionStyle = '';
+          const tr = clip.transition;
+          if (tr && tr.duration > 0 && elapsed < tr.duration) {
+            const t = elapsed / tr.duration;
+            const e = t * t * (3 - 2 * t);
+            fadeOpacity *= t;
+            switch (tr.type) {
+              case 'слайд влево': transitionStyle = `translateX(${(1 - e) * 100}%)`; break;
+              case 'слайд вправо': transitionStyle = `translateX(${-(1 - e) * 100}%)`; break;
+              case 'слайд вверх': transitionStyle = `translateY(${(1 - e) * 100}%)`; break;
+              case 'слайд вниз': transitionStyle = `translateY(${-(1 - e) * 100}%)`; break;
+              case 'масштаб': transitionStyle = `scale(${0.3 + 0.7 * e})`; break;
+              case 'поворот': transitionStyle = `rotate(${(1 - e) * 90}deg) scale(${e})`; break;
+              default: break;
+            }
+          }
+
           clips.push({
             id: clip.id,
             type: clip.type,
@@ -142,6 +161,7 @@ const PreviewPanel = () => {
             trackMuted: track.muted,
             filters: clip.filters || [],
             fadeOpacity,
+            transitionStyle,
           });
         }
       }
@@ -306,8 +326,8 @@ const PreviewPanel = () => {
       return (
         <div
           key={clip.id}
-          className="absolute inset-0 transition-opacity duration-100"
-          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview) }}
+          className="absolute inset-0"
+          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview), transform: clip.transitionStyle || undefined }}
         >
           <img
             src={clip.assetUrl}
@@ -324,8 +344,8 @@ const PreviewPanel = () => {
       return (
         <div
           key={clip.id}
-          className="absolute inset-0 transition-opacity duration-100"
-          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview) }}
+          className="absolute inset-0"
+          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview), transform: clip.transitionStyle || undefined }}
         >
           <video
             ref={(el) => {
