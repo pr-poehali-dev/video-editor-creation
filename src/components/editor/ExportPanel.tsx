@@ -54,15 +54,7 @@ const ExportPanel = () => {
         exportSettings,
         (progress, stage) => {
           setExportProgress(Math.round(progress * 100));
-          const stageLabels: Record<string, string> = {
-            'Loading assets': 'Загрузка файлов...',
-            'Building render graph': 'Построение графа...',
-            'Rendering': 'Рендеринг видео...',
-            'Encoding': 'Кодирование...',
-            'Reading output': 'Чтение результата...',
-            'Complete': 'Готово!',
-          };
-          setExportStage(stageLabels[stage] || stage);
+          setExportStage(stage);
         }
       );
 
