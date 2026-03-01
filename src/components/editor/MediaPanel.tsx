@@ -215,8 +215,13 @@ const MediaPanel = () => {
         project_id: pid,
       });
       if (res.file?.cdn_url) {
+        const newId = `server_${res.file.id}`;
         useEditorStore.setState((s) => ({
-          assets: s.assets.map(a => a.id === asset.id ? { ...a, url: res.file.cdn_url, id: `server_${res.file.id}` } : a)
+          assets: s.assets.map(a => a.id === asset.id ? { ...a, url: res.file.cdn_url, id: newId } : a),
+          tracks: s.tracks.map(t => ({
+            ...t,
+            clips: t.clips.map(c => c.assetId === asset.id ? { ...c, assetId: newId } : c),
+          })),
         }));
       }
     } catch (e) {

@@ -95,6 +95,8 @@ const PreviewPanel = () => {
 
   const [volume, setVolume] = useState(80);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [soundBlocked, setSoundBlocked] = useState(false);
+  const [loadErrors, setLoadErrors] = useState<Set<string>>(new Set());
   const previewRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
@@ -210,7 +212,15 @@ const PreviewPanel = () => {
   }, [isPlaying, maxTime]);
 
   useEffect(() => {
-    const onInteraction = () => { userInteracted.current = true; };
+    const onInteraction = () => {
+      userInteracted.current = true;
+      setSoundBlocked(false);
+      videoRefs.current.forEach(v => {
+        if (v.muted && !v.dataset.trackMuted) {
+          v.muted = false;
+        }
+      });
+    };
     document.addEventListener('click', onInteraction, { once: true });
     document.addEventListener('keydown', onInteraction, { once: true });
     return () => {
@@ -247,6 +257,7 @@ const PreviewPanel = () => {
         activeVideoIds.add(clip.id);
         const video = videoRefs.current.get(clip.id);
         if (video) {
+          video.dataset.trackMuted = clip.trackMuted ? '1' : '';
           const clipOffset = currentTime - clip.startTime;
           if (Math.abs(video.currentTime - clipOffset) > 0.5) {
             video.currentTime = clipOffset;
@@ -260,7 +271,9 @@ const PreviewPanel = () => {
                 video.muted = false;
                 video.volume = Math.min(1, clip.clipVolume * globalVol);
               }
-            }).catch(() => {});
+            }).catch(() => {
+              if (!userInteracted.current) setSoundBlocked(true);
+            });
           }
         }
       }
@@ -340,6 +353,15 @@ const PreviewPanel = () => {
     const hasUrl = !!clip.assetUrl;
 
     if (clip.type === 'image' && hasUrl) {
+      if (loadErrors.has(clip.id)) {
+        return (
+          <div key={clip.id} className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: i, background: '#0a0a0f' }}>
+            <Icon name="ImageOff" size={28} className="text-red-400 mb-2" />
+            <span className="text-[11px] text-red-400 font-medium">Не удалось загрузить</span>
+            <span className="text-[9px] text-muted-foreground mt-0.5">{clip.name}</span>
+          </div>
+        );
+      }
       const clipPreview = selectedClipId === clip.id ? previewFilter : null;
       return (
         <div
@@ -352,12 +374,22 @@ const PreviewPanel = () => {
             alt={clip.name}
             className="w-full h-full object-contain"
             style={{ background: '#0a0a0f' }}
+            onError={() => setLoadErrors(prev => new Set(prev).add(clip.id))}
           />
         </div>
       );
     }
 
     if (clip.type === 'video' && hasUrl) {
+      if (loadErrors.has(clip.id)) {
+        return (
+          <div key={clip.id} className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: i, background: '#0a0a0f' }}>
+            <Icon name="AlertTriangle" size={28} className="text-red-400 mb-2" />
+            <span className="text-[11px] text-red-400 font-medium">Не удалось загрузить видео</span>
+            <span className="text-[9px] text-muted-foreground mt-0.5">{clip.name}</span>
+          </div>
+        );
+      }
       const clipPreview = selectedClipId === clip.id ? previewFilter : null;
       return (
         <div
@@ -378,6 +410,7 @@ const PreviewPanel = () => {
             className="w-full h-full object-contain"
             style={{ background: '#0a0a0f' }}
             playsInline
+            onError={() => setLoadErrors(prev => new Set(prev).add(clip.id))}
           />
         </div>
       );
@@ -473,6 +506,16 @@ const PreviewPanel = () => {
               </span>
             )}
           </div>
+
+          {soundBlocked && (
+            <button
+              onClick={() => { userInteracted.current = true; setSoundBlocked(false); videoRefs.current.forEach(v => { if (!v.dataset.trackMuted) v.muted = false; }); }}
+              className="absolute top-2 right-2 z-50 flex items-center gap-1.5 bg-yellow-500/90 hover:bg-yellow-500 text-black text-[10px] font-semibold px-2.5 py-1 rounded-md cursor-pointer transition-colors"
+            >
+              <Icon name="VolumeX" size={12} />
+              Включить звук
+            </button>
+          )}
 
           <div className="absolute bottom-2 right-2 bg-black/70 px-2 py-0.5 rounded text-[10px] font-mono text-white/80 z-50">
             {formatTimecode(currentTime, project.fps)}
