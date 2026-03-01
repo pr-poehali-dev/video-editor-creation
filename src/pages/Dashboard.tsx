@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
 import useAuth from '@/hooks/use-auth';
@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 interface Project {
   id: number;
@@ -65,6 +66,11 @@ const Dashboard = () => {
   const [editName, setEditName] = useState('');
   const [loading, setLoading] = useState(true);
   const [mediaFiles, setMediaFiles] = useState<Array<{id: number; file_name: string; file_type: string; mime_type: string; file_size: number; duration: number; width: number; height: number; cdn_url: string; created_at: string}>>([]);
+  const [renameProject, setRenameProject] = useState<Project | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const [deleteProject, setDeleteProject] = useState<Project | null>(null);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadProfile().then(() => {
@@ -99,7 +105,7 @@ const Dashboard = () => {
       setBalance(balRes.balance || 0);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setMediaFiles((mediaRes as any).files || []);
-    } catch {}
+    } catch { /* ignore */ }
     setLoading(false);
   };
 
@@ -111,7 +117,7 @@ const Dashboard = () => {
       setBalance(res.balance);
       setTopupAmount('');
       loadData();
-    } catch {}
+    } catch { /* ignore */ }
   };
 
   const handleCreateProject = async () => {
@@ -123,7 +129,7 @@ const Dashboard = () => {
       } else {
         loadData();
       }
-    } catch {}
+    } catch { /* ignore */ }
   };
 
   const handleSaveName = async () => {
@@ -136,6 +142,58 @@ const Dashboard = () => {
     await logout();
     navigate('/auth');
   };
+
+  const handleRenameProject = async () => {
+    if (!renameProject || !renameValue.trim()) return;
+    try {
+      await projects.save({ id: renameProject.id, name: renameValue.trim() });
+      setMyProjects(prev => prev.map(p => p.id === renameProject.id ? { ...p, name: renameValue.trim() } : p));
+    } catch { /* ignore */ }
+    setRenameProject(null);
+  };
+
+  const handleDeleteProject = async () => {
+    if (!deleteProject) return;
+    try {
+      await projects.delete(deleteProject.id);
+      setMyProjects(prev => prev.filter(p => p.id !== deleteProject.id));
+    } catch { /* ignore */ }
+    setDeleteProject(null);
+  };
+
+  const handleDeleteMedia = async (fileId: number) => {
+    try {
+      await media.remove(fileId);
+      setMediaFiles(prev => prev.filter(f => f.id !== fileId));
+    } catch { /* ignore */ }
+  };
+
+  const handleMediaUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    setMediaUploading(true);
+    for (const file of Array.from(files)) {
+      try {
+        const b64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res: any = await media.upload({
+          file_data: b64,
+          file_name: file.name,
+          mime_type: file.type,
+        });
+        if (res.file) {
+          setMediaFiles(prev => [res.file, ...prev]);
+        }
+      } catch { /* ignore */ }
+    }
+    setMediaUploading(false);
+    e.target.value = '';
+  }, []);
 
   if (!isAuthenticated || !user) {
     return (
@@ -233,20 +291,38 @@ const Dashboard = () => {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {myProjects.map(p => (
-                    <div key={p.id} onClick={() => navigate(`/editor/${p.id}`)} className="rounded-lg overflow-hidden group cursor-pointer hover:ring-1 hover:ring-primary/50 transition-all" style={{ background: 'hsl(var(--editor-bg))' }}>
-                      <div className="aspect-video flex items-center justify-center" style={{ background: 'hsl(var(--editor-panel-header))' }}>
+                    <div key={p.id} className="rounded-lg overflow-hidden group cursor-pointer hover:ring-1 hover:ring-primary/50 transition-all relative" style={{ background: 'hsl(var(--editor-bg))' }}>
+                      <div onClick={() => navigate(`/editor/${p.id}`)} className="aspect-video flex items-center justify-center" style={{ background: 'hsl(var(--editor-panel-header))' }}>
                         {p.thumbnail_url ? (
                           <img src={p.thumbnail_url} alt={p.name} className="w-full h-full object-cover" />
                         ) : (
                           <Icon name="Film" size={32} className="text-muted-foreground/30" />
                         )}
                       </div>
-                      <div className="p-3">
-                        <div className="text-sm font-medium truncate">{p.name}</div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">
-                          {new Date(p.updated_at).toLocaleDateString('ru-RU')}
-                          {p.is_public && <span className="ml-2 text-green-400">Публичный</span>}
+                      <div className="p-3 flex items-start justify-between" onClick={() => navigate(`/editor/${p.id}`)}>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium truncate">{p.name}</div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5">
+                            {new Date(p.updated_at).toLocaleDateString('ru-RU')}
+                            {p.is_public && <span className="ml-2 text-green-400">Публичный</span>}
+                          </div>
                         </div>
+                      </div>
+                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setRenameProject(p); setRenameValue(p.name); }}
+                          className="w-7 h-7 rounded-md bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+                          title="Переименовать"
+                        >
+                          <Icon name="Pencil" size={12} className="text-white" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeleteProject(p); }}
+                          className="w-7 h-7 rounded-md bg-black/60 hover:bg-destructive flex items-center justify-center transition-colors"
+                          title="Удалить"
+                        >
+                          <Icon name="Trash2" size={12} className="text-white" />
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -356,25 +432,32 @@ const Dashboard = () => {
                 <h2 className="text-sm font-semibold flex items-center gap-2">
                   <Icon name="Image" size={16} /> Все загруженные файлы
                 </h2>
-                <span className="text-xs text-muted-foreground">{mediaFiles.length} файлов</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">{mediaFiles.length} файлов</span>
+                  <button onClick={() => mediaInputRef.current?.click()} disabled={mediaUploading} className="nle-button active flex items-center gap-1.5">
+                    <Icon name={mediaUploading ? 'Loader2' : 'Upload'} size={12} className={mediaUploading ? 'animate-spin' : ''} />
+                    {mediaUploading ? 'Загрузка...' : 'Загрузить'}
+                  </button>
+                  <input ref={mediaInputRef} type="file" accept="video/*,audio/*,image/*" multiple onChange={handleMediaUpload} className="hidden" />
+                </div>
               </div>
               {mediaFiles.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Icon name="Image" size={48} className="mx-auto mb-3 opacity-30" />
                   <p className="text-sm">Нет загруженных файлов</p>
-                  <p className="text-xs mt-1">Загрузите медиа-файлы в редакторе проекта</p>
+                  <p className="text-xs mt-1">Нажмите «Загрузить», чтобы добавить медиа-файлы</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                   {mediaFiles.map(f => (
-                    <div key={f.id} className="rounded-lg overflow-hidden group" style={{ background: 'hsl(var(--editor-bg))' }}>
+                    <div key={f.id} className="rounded-lg overflow-hidden group relative" style={{ background: 'hsl(var(--editor-bg))' }}>
                       <div className="aspect-video flex items-center justify-center relative" style={{ background: 'hsl(var(--editor-panel-header))' }}>
                         {f.file_type === 'image' ? (
                           <img src={f.cdn_url} alt={f.file_name} className="w-full h-full object-cover" />
                         ) : (
                           <Icon name={f.file_type === 'audio' ? 'Music' : 'Film'} size={28} className="text-muted-foreground/40" />
                         )}
-                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-black/60 text-white">
+                        <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-black/60 text-white">
                           {f.file_type === 'image' ? 'Фото' : f.file_type === 'audio' ? 'Аудио' : 'Видео'}
                         </div>
                       </div>
@@ -386,6 +469,13 @@ const Dashboard = () => {
                           {' • '}{new Date(f.created_at).toLocaleDateString('ru-RU')}
                         </div>
                       </div>
+                      <button
+                        onClick={() => handleDeleteMedia(f.id)}
+                        className="absolute top-1 right-1 w-6 h-6 rounded-md bg-black/60 hover:bg-destructive flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                        title="Удалить"
+                      >
+                        <Icon name="Trash2" size={11} className="text-white" />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -429,6 +519,41 @@ const Dashboard = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <Dialog open={!!renameProject} onOpenChange={() => setRenameProject(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Переименовать проект</DialogTitle>
+          </DialogHeader>
+          <Input
+            value={renameValue}
+            onChange={e => setRenameValue(e.target.value)}
+            placeholder="Название проекта"
+            className="bg-secondary/50 border-border"
+            onKeyDown={e => e.key === 'Enter' && handleRenameProject()}
+            autoFocus
+          />
+          <DialogFooter className="gap-2">
+            <button onClick={() => setRenameProject(null)} className="nle-button px-4">Отмена</button>
+            <button onClick={handleRenameProject} disabled={!renameValue.trim()} className="nle-button active px-4">Сохранить</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteProject} onOpenChange={() => setDeleteProject(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Удалить проект?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Проект <strong>«{deleteProject?.name}»</strong> будет удалён без возможности восстановления.
+          </p>
+          <DialogFooter className="gap-2">
+            <button onClick={() => setDeleteProject(null)} className="nle-button px-4">Отмена</button>
+            <button onClick={handleDeleteProject} className="nle-button px-4 bg-destructive text-destructive-foreground hover:bg-destructive/90">Удалить</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
