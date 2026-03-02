@@ -130,7 +130,7 @@ const MediaPanel = () => {
   const [libraryFiles, setLibraryFiles] = useState<Array<{id: number; file_name: string; file_type: string; mime_type: string; file_size: number; duration: number; width: number; height: number; cdn_url: string; created_at: string}>>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryFilter, setLibraryFilter] = useState<'all' | 'video' | 'audio' | 'image'>('all');
-  const [uploadErrors, setUploadErrors] = useState<Array<{name: string; error: string}>>([]);
+  const [uploadErrors, setUploadErrors] = useState<Array<{name: string; error: string; file: File; assetId: string; duration: number; attempt: number; retrying: boolean}>>([]);
 
   useEffect(() => {
     if (!isAuthenticated || !project.id) return;
@@ -185,6 +185,65 @@ const MediaPanel = () => {
     fileInputRef.current?.click();
   }, []);
 
+  const doUpload = useCallback(async (file: File, assetId: string, duration: number, attempt: number) => {
+    setUploading(prev => prev.includes(assetId) ? prev : [...prev, assetId]);
+    try {
+      const b64 = await fileToBase64(file);
+      const pid = useEditorStore.getState().project.id;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res: any = await mediaApi.upload({
+        file_data: b64,
+        file_name: file.name,
+        mime_type: file.type,
+        duration,
+        project_id: pid,
+      });
+      if (res.file?.cdn_url) {
+        const newId = `server_${res.file.id}`;
+        useEditorStore.setState((s) => ({
+          assets: s.assets.map(a => a.id === assetId ? { ...a, url: res.file.cdn_url, id: newId } : a),
+          tracks: s.tracks.map(t => ({
+            ...t,
+            clips: t.clips.map(c => c.assetId === assetId ? { ...c, assetId: newId } : c),
+          })),
+        }));
+      }
+      setUploadErrors(prev => prev.filter(x => x.assetId !== assetId));
+      return true;
+    } catch (e) {
+      console.error(`Upload failed (attempt ${attempt}):`, e);
+      if (attempt < 3) {
+        const delay = attempt * 3000;
+        setUploadErrors(prev => {
+          const existing = prev.find(x => x.assetId === assetId);
+          if (existing) return prev.map(x => x.assetId === assetId ? { ...x, attempt, retrying: true } : x);
+          return [...prev, { name: file.name, error: String(e), file, assetId, duration, attempt, retrying: true }];
+        });
+        await new Promise(r => setTimeout(r, delay));
+        return doUpload(file, assetId, duration, attempt + 1);
+      }
+      setUploadErrors(prev => {
+        const existing = prev.find(x => x.assetId === assetId);
+        if (existing) return prev.map(x => x.assetId === assetId ? { ...x, attempt, retrying: false } : x);
+        return [...prev, { name: file.name, error: String(e), file, assetId, duration, attempt, retrying: false }];
+      });
+      return false;
+    } finally {
+      setUploading(prev => prev.filter(id => id !== assetId));
+    }
+  }, []);
+
+  const retryUpload = useCallback((assetId: string) => {
+    const err = uploadErrors.find(x => x.assetId === assetId);
+    if (!err) return;
+    setUploadErrors(prev => prev.map(x => x.assetId === assetId ? { ...x, retrying: true, attempt: 0 } : x));
+    doUpload(err.file, err.assetId, err.duration, 1);
+  }, [uploadErrors, doUpload]);
+
+  const dismissError = useCallback((assetId: string) => {
+    setUploadErrors(prev => prev.filter(x => x.assetId !== assetId));
+  }, []);
+
   const uploadFile = useCallback(async (file: File) => {
     let type: 'video' | 'audio' | 'image' = 'video';
     if (file.type.startsWith('audio/')) type = 'audio';
@@ -202,37 +261,8 @@ const MediaPanel = () => {
     });
 
     if (!isAuthenticated) return;
-
-    setUploading(prev => [...prev, asset.id]);
-    try {
-      const b64 = await fileToBase64(file);
-      const pid = useEditorStore.getState().project.id;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const res: any = await mediaApi.upload({
-        file_data: b64,
-        file_name: file.name,
-        mime_type: file.type,
-        duration,
-        project_id: pid,
-      });
-      if (res.file?.cdn_url) {
-        const newId = `server_${res.file.id}`;
-        useEditorStore.setState((s) => ({
-          assets: s.assets.map(a => a.id === asset.id ? { ...a, url: res.file.cdn_url, id: newId } : a),
-          tracks: s.tracks.map(t => ({
-            ...t,
-            clips: t.clips.map(c => c.assetId === asset.id ? { ...c, assetId: newId } : c),
-          })),
-        }));
-      }
-    } catch (e) {
-      console.error('Upload failed:', e);
-      setUploadErrors(prev => [...prev, { name: file.name, error: String(e) }]);
-      setTimeout(() => setUploadErrors(prev => prev.filter(x => x.name !== file.name)), 6000);
-    } finally {
-      setUploading(prev => prev.filter(id => id !== asset.id));
-    }
-  }, [addAsset, isAuthenticated]);
+    doUpload(file, asset.id, duration, 1);
+  }, [addAsset, isAuthenticated, doUpload]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -422,10 +452,26 @@ const MediaPanel = () => {
           </div>
           {uploadErrors.length > 0 && (
             <div className="px-2 pb-1 space-y-1">
-              {uploadErrors.map((err, i) => (
-                <div key={i} className="flex items-center gap-1.5 bg-red-500/15 text-red-400 text-[10px] px-2 py-1.5 rounded">
-                  <Icon name="AlertTriangle" size={12} />
-                  <span className="truncate">Не удалось загрузить {err.name}</span>
+              {uploadErrors.map((err) => (
+                <div key={err.assetId} className="flex items-center gap-1.5 bg-red-500/15 text-red-400 text-[10px] px-2 py-1.5 rounded">
+                  {err.retrying ? (
+                    <Icon name="Loader2" size={12} className="animate-spin shrink-0" />
+                  ) : (
+                    <Icon name="AlertTriangle" size={12} className="shrink-0" />
+                  )}
+                  <span className="truncate flex-1">
+                    {err.retrying ? `Повтор (${err.attempt}/3)... ${err.name}` : `Ошибка: ${err.name}`}
+                  </span>
+                  {!err.retrying && (
+                    <>
+                      <button onClick={() => retryUpload(err.assetId)} className="shrink-0 hover:text-red-300 transition-colors" title="Повторить">
+                        <Icon name="RotateCw" size={12} />
+                      </button>
+                      <button onClick={() => dismissError(err.assetId)} className="shrink-0 hover:text-red-300 transition-colors" title="Скрыть">
+                        <Icon name="X" size={12} />
+                      </button>
+                    </>
+                  )}
                 </div>
               ))}
             </div>
