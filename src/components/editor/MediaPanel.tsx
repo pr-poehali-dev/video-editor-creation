@@ -105,7 +105,7 @@ const getMediaDuration = (file: File): Promise<number> => {
   });
 };
 
-const DIRECT_UPLOAD_LIMIT = 10 * 1024 * 1024;
+const DIRECT_UPLOAD_LIMIT = 2 * 1024 * 1024;
 const MAX_UPLOAD_SIZE = 150 * 1024 * 1024;
 const CHUNK_SIZE = 2 * 1024 * 1024;
 
