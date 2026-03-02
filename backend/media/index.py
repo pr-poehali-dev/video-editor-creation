@@ -13,7 +13,7 @@ CORS = {
     'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token',
     'Access-Control-Max-Age': '86400',
 }
-MAX_FILE_SIZE = 100 * 1024 * 1024
+MAX_FILE_SIZE = 10 * 1024 * 1024
 
 ALLOWED_TYPES = {
     'image/jpeg': 'image', 'image/png': 'image', 'image/webp': 'image', 'image/gif': 'image',
