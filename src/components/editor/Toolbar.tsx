@@ -24,7 +24,9 @@ const Toolbar = () => {
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const projectMenuRef = useRef<HTMLDivElement>(null);
+  const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => { loadProfile(); }, []);
 
@@ -89,6 +91,15 @@ const Toolbar = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [handleSave]);
 
+  useEffect(() => {
+    if (autoSaveRef.current) clearInterval(autoSaveRef.current);
+    if (!autoSaveEnabled || !project.id || !isAuthenticated) return;
+    autoSaveRef.current = setInterval(() => {
+      handleSave();
+    }, 2 * 60 * 1000);
+    return () => { if (autoSaveRef.current) clearInterval(autoSaveRef.current); };
+  }, [autoSaveEnabled, project.id, isAuthenticated, handleSave]);
+
   return (
     <div className="h-10 flex items-center justify-between px-3 border-b border-border" style={{ background: 'hsl(var(--editor-panel))' }}>
       <div className="flex items-center gap-2">
@@ -108,6 +119,15 @@ const Toolbar = () => {
                 </button>
                 <button onClick={handleNewProject} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50">
                   <Icon name="FilePlus" size={11} /> Новый проект
+                </button>
+                <div className="border-t border-border my-1" />
+                <button onClick={() => setAutoSaveEnabled(!autoSaveEnabled)} className="flex items-center justify-between w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50">
+                  <span className="flex items-center gap-2">
+                    <Icon name="Timer" size={11} /> Автосохранение
+                  </span>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded ${autoSaveEnabled ? 'bg-green-500/20 text-green-400' : 'bg-muted text-muted-foreground'}`}>
+                    {autoSaveEnabled ? 'ВКЛ' : 'ВЫКЛ'}
+                  </span>
                 </button>
               </div>
             </div>

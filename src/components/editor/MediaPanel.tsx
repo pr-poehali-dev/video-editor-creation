@@ -105,6 +105,8 @@ const getMediaDuration = (file: File): Promise<number> => {
   });
 };
 
+const MAX_UPLOAD_SIZE = 2.5 * 1024 * 1024;
+
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -115,6 +117,12 @@ const fileToBase64 = (file: File): Promise<string> => {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+};
+
+const formatSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 };
 
 const MediaPanel = () => {
@@ -130,7 +138,7 @@ const MediaPanel = () => {
   const [libraryFiles, setLibraryFiles] = useState<Array<{id: number; file_name: string; file_type: string; mime_type: string; file_size: number; duration: number; width: number; height: number; cdn_url: string; created_at: string}>>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryFilter, setLibraryFilter] = useState<'all' | 'video' | 'audio' | 'image'>('all');
-  const [uploadErrors, setUploadErrors] = useState<Array<{name: string; error: string; file: File; assetId: string; duration: number; attempt: number; retrying: boolean}>>([]);
+  const [uploadErrors, setUploadErrors] = useState<Array<{name: string; error: string; file: File; assetId: string; duration: number; attempt: number; retrying: boolean; oversized?: boolean}>>([]);
 
   useEffect(() => {
     if (!isAuthenticated || !project.id) return;
@@ -261,6 +269,21 @@ const MediaPanel = () => {
     });
 
     if (!isAuthenticated) return;
+
+    if (file.size > MAX_UPLOAD_SIZE) {
+      setUploadErrors(prev => [...prev, {
+        name: file.name,
+        error: `Файл слишком большой (${formatSize(file.size)}). Макс: ${formatSize(MAX_UPLOAD_SIZE)}`,
+        file,
+        assetId: asset.id,
+        duration,
+        attempt: 3,
+        retrying: false,
+        oversized: true,
+      }]);
+      return;
+    }
+
     doUpload(file, asset.id, duration, 1);
   }, [addAsset, isAuthenticated, doUpload]);
 
@@ -453,24 +476,26 @@ const MediaPanel = () => {
           {uploadErrors.length > 0 && (
             <div className="px-2 pb-1 space-y-1">
               {uploadErrors.map((err) => (
-                <div key={err.assetId} className="flex items-center gap-1.5 bg-red-500/15 text-red-400 text-[10px] px-2 py-1.5 rounded">
+                <div key={err.assetId} className={`flex items-center gap-1.5 text-[10px] px-2 py-1.5 rounded ${err.oversized ? 'bg-yellow-500/15 text-yellow-400' : 'bg-red-500/15 text-red-400'}`}>
                   {err.retrying ? (
                     <Icon name="Loader2" size={12} className="animate-spin shrink-0" />
+                  ) : err.oversized ? (
+                    <Icon name="FileWarning" size={12} className="shrink-0" />
                   ) : (
                     <Icon name="AlertTriangle" size={12} className="shrink-0" />
                   )}
                   <span className="truncate flex-1">
-                    {err.retrying ? `Повтор (${err.attempt}/3)... ${err.name}` : `Ошибка: ${err.name}`}
+                    {err.retrying ? `Повтор (${err.attempt}/3)... ${err.name}` : err.oversized ? `${err.name} — слишком большой (макс 2.5 МБ)` : `Ошибка: ${err.name}`}
                   </span>
+                  {!err.retrying && !err.oversized && (
+                    <button onClick={() => retryUpload(err.assetId)} className="shrink-0 hover:text-red-300 transition-colors" title="Повторить">
+                      <Icon name="RotateCw" size={12} />
+                    </button>
+                  )}
                   {!err.retrying && (
-                    <>
-                      <button onClick={() => retryUpload(err.assetId)} className="shrink-0 hover:text-red-300 transition-colors" title="Повторить">
-                        <Icon name="RotateCw" size={12} />
-                      </button>
-                      <button onClick={() => dismissError(err.assetId)} className="shrink-0 hover:text-red-300 transition-colors" title="Скрыть">
-                        <Icon name="X" size={12} />
-                      </button>
-                    </>
+                    <button onClick={() => dismissError(err.assetId)} className={`shrink-0 transition-colors ${err.oversized ? 'hover:text-yellow-300' : 'hover:text-red-300'}`} title="Скрыть">
+                      <Icon name="X" size={12} />
+                    </button>
                   )}
                 </div>
               ))}
