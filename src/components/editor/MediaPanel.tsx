@@ -109,6 +109,20 @@ const DIRECT_UPLOAD_LIMIT = 2 * 1024 * 1024;
 const MAX_UPLOAD_SIZE = 150 * 1024 * 1024;
 const CHUNK_SIZE = 2 * 1024 * 1024;
 
+const MIME_BY_EXT: Record<string, string> = {
+  mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', flac: 'audio/flac',
+  aac: 'audio/aac', m4a: 'audio/x-m4a', wma: 'audio/x-ms-wma', opus: 'audio/ogg',
+  mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime', avi: 'video/x-msvideo',
+  mkv: 'video/x-matroska', wmv: 'video/x-ms-wmv', '3gp': 'video/3gpp', mpeg: 'video/mpeg',
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+  webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml', tiff: 'image/tiff',
+};
+const getFileMime = (file: File) => {
+  if (file.type && file.type !== 'application/octet-stream') return file.type;
+  const ext = file.name.split('.').pop()?.toLowerCase() || '';
+  return MIME_BY_EXT[ext] || 'application/octet-stream';
+};
+
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -211,7 +225,7 @@ const MediaPanel = () => {
       const res: any = await mediaApi.upload({
         file_data: b64,
         file_name: file.name,
-        mime_type: file.type,
+        mime_type: getFileMime(file),
         duration,
         project_id: pid,
       });
@@ -251,6 +265,7 @@ const MediaPanel = () => {
   }, []);
 
   const doChunkedUpload = useCallback(async (file: File, assetId: string, duration: number) => {
+    console.log('[Chunked] Starting upload:', file.name, 'size:', file.size, 'mime:', getFileMime(file), 'chunks:', Math.ceil(file.size / CHUNK_SIZE));
     setUploading(prev => prev.includes(assetId) ? prev : [...prev, assetId]);
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
     setUploadProgress(prev => ({ ...prev, [assetId]: { current: 0, total: totalChunks } }));
@@ -258,7 +273,7 @@ const MediaPanel = () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const initRes: any = await mediaApi.chunkedInit({
         file_name: file.name,
-        mime_type: file.type,
+        mime_type: getFileMime(file),
         file_size: file.size,
         total_chunks: totalChunks,
       });
@@ -302,8 +317,9 @@ const MediaPanel = () => {
         }));
       }
       setUploadErrors(prev => prev.filter(x => x.assetId !== assetId));
-    } catch (e) {
-      console.error('Chunked upload failed:', e);
+    } catch (e: unknown) {
+      const errMsg = e && typeof e === 'object' && 'error' in e ? (e as { error: string }).error : String(e);
+      console.error('Chunked upload failed:', errMsg, e);
       setUploadErrors(prev => [...prev, {
         name: file.name,
         error: String(e),

@@ -20,8 +20,12 @@ ALLOWED_TYPES = {
     'image/jpeg': 'image', 'image/png': 'image', 'image/webp': 'image', 'image/gif': 'image',
     'image/bmp': 'image', 'image/x-ms-bmp': 'image', 'image/svg+xml': 'image', 'image/tiff': 'image',
     'audio/mpeg': 'audio', 'audio/wav': 'audio', 'audio/ogg': 'audio', 'audio/mp4': 'audio', 'audio/webm': 'audio',
-    'audio/flac': 'audio', 'audio/aac': 'audio', 'audio/x-m4a': 'audio',
+    'audio/flac': 'audio', 'audio/aac': 'audio', 'audio/x-m4a': 'audio', 'audio/x-wav': 'audio',
+    'audio/mp3': 'audio', 'audio/x-mp3': 'audio', 'audio/x-mpeg': 'audio', 'audio/wave': 'audio',
+    'audio/x-aac': 'audio', 'audio/x-flac': 'audio', 'audio/vnd.wave': 'audio', 'audio/basic': 'audio',
     'video/mp4': 'video', 'video/webm': 'video', 'video/quicktime': 'video', 'video/x-msvideo': 'video',
+    'video/mpeg': 'video', 'video/3gpp': 'video', 'video/x-matroska': 'video', 'video/x-ms-wmv': 'video',
+    'application/octet-stream': 'video',
 }
 
 def get_db():
