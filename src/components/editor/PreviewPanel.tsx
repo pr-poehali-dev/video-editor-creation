@@ -214,9 +214,27 @@ const PreviewPanel = () => {
     if (soundUnlocked) return;
     setSoundUnlocked(true);
     videoRefs.current.forEach(v => {
-      if (!v.dataset.trackMuted) v.muted = false;
+      if (!v.dataset.trackMuted) {
+        v.muted = false;
+        v.play().catch(() => {});
+      }
     });
-  }, [soundUnlocked]);
+    const globalVol = volume / 100;
+    for (const clip of activeClips) {
+      if (clip.type === 'audio' && !clip.trackMuted && clip.assetUrl) {
+        let audio = audioRefs.current.get(clip.id);
+        if (!audio) {
+          audio = new Audio(clip.assetUrl);
+          audio.loop = false;
+          audioRefs.current.set(clip.id, audio);
+        }
+        const clipOffset = currentTime - clip.startTime;
+        audio.currentTime = clipOffset;
+        audio.volume = Math.min(1, clip.clipVolume * globalVol);
+        audio.play().catch(() => {});
+      }
+    }
+  }, [soundUnlocked, activeClips, currentTime, volume]);
 
   useEffect(() => {
     const globalVol = volume / 100;

@@ -130,6 +130,7 @@ const MediaPanel = () => {
   const [libraryFiles, setLibraryFiles] = useState<Array<{id: number; file_name: string; file_type: string; mime_type: string; file_size: number; duration: number; width: number; height: number; cdn_url: string; created_at: string}>>([]);
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryFilter, setLibraryFilter] = useState<'all' | 'video' | 'audio' | 'image'>('all');
+  const [uploadErrors, setUploadErrors] = useState<Array<{name: string; error: string}>>([]);
 
   useEffect(() => {
     if (!isAuthenticated || !project.id) return;
@@ -226,6 +227,8 @@ const MediaPanel = () => {
       }
     } catch (e) {
       console.error('Upload failed:', e);
+      setUploadErrors(prev => [...prev, { name: file.name, error: String(e) }]);
+      setTimeout(() => setUploadErrors(prev => prev.filter(x => x.name !== file.name)), 6000);
     } finally {
       setUploading(prev => prev.filter(id => id !== asset.id));
     }
@@ -417,6 +420,16 @@ const MediaPanel = () => {
             )}
             <input ref={fileInputRef} type="file" accept="video/*,audio/*,image/*" multiple onChange={handleFileChange} className="hidden" />
           </div>
+          {uploadErrors.length > 0 && (
+            <div className="px-2 pb-1 space-y-1">
+              {uploadErrors.map((err, i) => (
+                <div key={i} className="flex items-center gap-1.5 bg-red-500/15 text-red-400 text-[10px] px-2 py-1.5 rounded">
+                  <Icon name="AlertTriangle" size={12} />
+                  <span className="truncate">Не удалось загрузить {err.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <ScrollArea className="flex-1 px-2 editor-scrollbar">
             <div className="grid grid-cols-2 gap-1.5 pb-2">
               {assets.map(asset => (

@@ -17,8 +17,10 @@ MAX_FILE_SIZE = 100 * 1024 * 1024
 
 ALLOWED_TYPES = {
     'image/jpeg': 'image', 'image/png': 'image', 'image/webp': 'image', 'image/gif': 'image',
+    'image/bmp': 'image', 'image/x-ms-bmp': 'image', 'image/svg+xml': 'image', 'image/tiff': 'image',
     'audio/mpeg': 'audio', 'audio/wav': 'audio', 'audio/ogg': 'audio', 'audio/mp4': 'audio', 'audio/webm': 'audio',
-    'video/mp4': 'video', 'video/webm': 'video', 'video/quicktime': 'video',
+    'audio/flac': 'audio', 'audio/aac': 'audio', 'audio/x-m4a': 'audio',
+    'video/mp4': 'video', 'video/webm': 'video', 'video/quicktime': 'video', 'video/x-msvideo': 'video',
 }
 
 def get_db():
