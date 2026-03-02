@@ -105,7 +105,7 @@ const getMediaDuration = (file: File): Promise<number> => {
   });
 };
 
-const MAX_UPLOAD_SIZE = 2.5 * 1024 * 1024;
+const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
 
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -117,12 +117,6 @@ const fileToBase64 = (file: File): Promise<string> => {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-};
-
-const formatSize = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 };
 
 const MediaPanel = () => {
@@ -485,7 +479,7 @@ const MediaPanel = () => {
                     <Icon name="AlertTriangle" size={12} className="shrink-0" />
                   )}
                   <span className="truncate flex-1">
-                    {err.retrying ? `Повтор (${err.attempt}/3)... ${err.name}` : err.oversized ? `${err.name} — слишком большой (макс 2.5 МБ)` : `Ошибка: ${err.name}`}
+                    {err.retrying ? `Повтор (${err.attempt}/3)... ${err.name}` : err.oversized ? `${err.name} — слишком большой (макс 10 МБ)` : `Ошибка: ${err.name}`}
                   </span>
                   {!err.retrying && !err.oversized && (
                     <button onClick={() => retryUpload(err.assetId)} className="shrink-0 hover:text-red-300 transition-colors" title="Повторить">
