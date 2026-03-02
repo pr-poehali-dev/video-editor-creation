@@ -1,4 +1,4 @@
-"""Загрузка и получение медиафайлов пользователя"""
+"""Загрузка и получение медиафайлов пользователя (обычная + chunked до 150 МБ)"""
 import json
 import os
 import base64
@@ -13,7 +13,8 @@ CORS = {
     'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token',
     'Access-Control-Max-Age': '86400',
 }
-MAX_FILE_SIZE = 10 * 1024 * 1024
+MAX_FILE_SIZE = 150 * 1024 * 1024
+CHUNK_SIZE = 2 * 1024 * 1024
 
 ALLOWED_TYPES = {
     'image/jpeg': 'image', 'image/png': 'image', 'image/webp': 'image', 'image/gif': 'image',
@@ -98,6 +99,21 @@ def handler(event, context):
         conn.close()
         return result
 
+    if route == '/chunked/init' and method == 'POST':
+        result = handle_chunked_init(conn, user, event)
+        conn.close()
+        return result
+
+    if route == '/chunked/part' and method == 'POST':
+        result = handle_chunked_part(user, event)
+        conn.close()
+        return result
+
+    if route == '/chunked/complete' and method == 'POST':
+        result = handle_chunked_complete(conn, user, event)
+        conn.close()
+        return result
+
     conn.close()
     return err('Маршрут не найден', 404)
 
@@ -124,7 +140,7 @@ def handle_upload(conn, user, event):
 
     file_bytes = base64.b64decode(file_data_b64)
     if len(file_bytes) > MAX_FILE_SIZE:
-        return err('Файл слишком большой (макс 100 МБ)')
+        return err('Файл слишком большой (макс 150 МБ)')
 
     file_type = ALLOWED_TYPES[mime_type]
     ext = file_name.rsplit('.', 1)[-1].lower() if '.' in file_name else 'bin'
@@ -163,6 +179,129 @@ def handle_upload(conn, user, event):
             'height': height,
             'cdn_url': cdn_url,
             'created_at': str(row[1]),
+        }
+    })
+
+
+def handle_chunked_init(conn, user, event):
+    body_str = event.get('body', '{}')
+    if event.get('isBase64Encoded'):
+        body_str = base64.b64decode(body_str).decode('utf-8')
+    body = json.loads(body_str)
+
+    file_name = body.get('file_name', 'file')
+    mime_type = body.get('mime_type', 'application/octet-stream')
+    file_size = body.get('file_size', 0)
+    total_chunks = body.get('total_chunks', 1)
+
+    if mime_type not in ALLOWED_TYPES:
+        return err(f'Тип файла {mime_type} не поддерживается')
+    if file_size > MAX_FILE_SIZE:
+        return err(f'Файл слишком большой (макс {MAX_FILE_SIZE // (1024*1024)} МБ)')
+
+    upload_id = uuid.uuid4().hex
+    ext = file_name.rsplit('.', 1)[-1].lower() if '.' in file_name else 'bin'
+    s3_key = f"media/{user['id']}/{upload_id}.{ext}"
+
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO chunked_uploads (upload_id, user_id, file_name, mime_type, file_size, total_chunks, s3_key)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, (upload_id, user['id'], file_name, mime_type, file_size, total_chunks, s3_key))
+    conn.commit()
+    cur.close()
+
+    return ok({'upload_id': upload_id, 'total_chunks': total_chunks})
+
+
+def handle_chunked_part(user, event):
+    body_str = event.get('body', '{}')
+    if event.get('isBase64Encoded'):
+        body_str = base64.b64decode(body_str).decode('utf-8')
+    body = json.loads(body_str)
+
+    upload_id = body.get('upload_id')
+    chunk_index = body.get('chunk_index', 0)
+    chunk_data = body.get('chunk_data')
+
+    if not upload_id or chunk_data is None:
+        return err('upload_id и chunk_data обязательны')
+
+    chunk_bytes = base64.b64decode(chunk_data)
+    s3 = get_s3()
+    chunk_key = f"chunks/{user['id']}/{upload_id}/part_{chunk_index:05d}"
+    s3.put_object(Bucket='files', Key=chunk_key, Body=chunk_bytes)
+
+    return ok({'chunk_index': chunk_index, 'size': len(chunk_bytes)})
+
+
+def handle_chunked_complete(conn, user, event):
+    body_str = event.get('body', '{}')
+    if event.get('isBase64Encoded'):
+        body_str = base64.b64decode(body_str).decode('utf-8')
+    body = json.loads(body_str)
+
+    upload_id = body.get('upload_id')
+    duration = body.get('duration', 0)
+    width = body.get('width')
+    height = body.get('height')
+    project_id = body.get('project_id')
+
+    if not upload_id:
+        return err('upload_id обязателен')
+
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT file_name, mime_type, file_size, total_chunks, s3_key
+        FROM chunked_uploads WHERE upload_id = %s AND user_id = %s
+    """, (upload_id, user['id']))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        return err('Загрузка не найдена', 404)
+
+    file_name, mime_type, file_size, total_chunks, s3_key = row
+    file_type = ALLOWED_TYPES.get(mime_type, 'video')
+
+    s3 = get_s3()
+    parts = []
+    for i in range(total_chunks):
+        chunk_key = f"chunks/{user['id']}/{upload_id}/part_{i:05d}"
+        obj = s3.get_object(Bucket='files', Key=chunk_key)
+        parts.append(obj['Body'].read())
+
+    full_data = b''.join(parts)
+    s3.put_object(Bucket='files', Key=s3_key, Body=full_data, ContentType=mime_type)
+
+    for i in range(total_chunks):
+        chunk_key = f"chunks/{user['id']}/{upload_id}/part_{i:05d}"
+        s3.delete_object(Bucket='files', Key=chunk_key)
+
+    cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{s3_key}"
+
+    cur.execute("""
+        INSERT INTO media_files (user_id, project_id, file_name, file_type, mime_type, file_size, duration, width, height, s3_key, cdn_url)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id, created_at
+    """, (user['id'], project_id, file_name, file_type, mime_type, len(full_data), duration, width, height, s3_key, cdn_url))
+    media_row = cur.fetchone()
+
+    cur.execute("DELETE FROM chunked_uploads WHERE upload_id = %s", (upload_id,))
+    conn.commit()
+    cur.close()
+
+    return ok({
+        'file': {
+            'id': media_row[0],
+            'file_name': file_name,
+            'file_type': file_type,
+            'mime_type': mime_type,
+            'file_size': len(full_data),
+            'duration': duration,
+            'width': width,
+            'height': height,
+            'cdn_url': cdn_url,
+            'created_at': str(media_row[1]),
         }
     })
 

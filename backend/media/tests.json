@@ -29,6 +29,30 @@
       "expectedStatus": 401,
       "expectedBody": {"error": "string"},
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "Chunked init without auth",
+      "method": "POST",
+      "path": "/?route=%2Fchunked%2Finit",
+      "expectedStatus": 401,
+      "expectedBody": {"error": "string"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Chunked part without auth",
+      "method": "POST",
+      "path": "/?route=%2Fchunked%2Fpart",
+      "expectedStatus": 401,
+      "expectedBody": {"error": "string"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Chunked complete without auth",
+      "method": "POST",
+      "path": "/?route=%2Fchunked%2Fcomplete",
+      "expectedStatus": 401,
+      "expectedBody": {"error": "string"},
+      "bodyMatcher": "partial"
     }
   ]
 }

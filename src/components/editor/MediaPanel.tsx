@@ -105,7 +105,9 @@ const getMediaDuration = (file: File): Promise<number> => {
   });
 };
 
-const MAX_UPLOAD_SIZE = 10 * 1024 * 1024;
+const DIRECT_UPLOAD_LIMIT = 10 * 1024 * 1024;
+const MAX_UPLOAD_SIZE = 150 * 1024 * 1024;
+const CHUNK_SIZE = 2 * 1024 * 1024;
 
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -116,6 +118,18 @@ const fileToBase64 = (file: File): Promise<string> => {
     };
     reader.onerror = reject;
     reader.readAsDataURL(file);
+  });
+};
+
+const blobToBase64 = (blob: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(',')[1]);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
   });
 };
 
@@ -133,6 +147,7 @@ const MediaPanel = () => {
   const [libraryLoading, setLibraryLoading] = useState(false);
   const [libraryFilter, setLibraryFilter] = useState<'all' | 'video' | 'audio' | 'image'>('all');
   const [uploadErrors, setUploadErrors] = useState<Array<{name: string; error: string; file: File; assetId: string; duration: number; attempt: number; retrying: boolean; oversized?: boolean}>>([]);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, { current: number; total: number }>>({});
 
   useEffect(() => {
     if (!isAuthenticated || !project.id) return;
@@ -235,12 +250,85 @@ const MediaPanel = () => {
     }
   }, []);
 
+  const doChunkedUpload = useCallback(async (file: File, assetId: string, duration: number) => {
+    setUploading(prev => prev.includes(assetId) ? prev : [...prev, assetId]);
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    setUploadProgress(prev => ({ ...prev, [assetId]: { current: 0, total: totalChunks } }));
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const initRes: any = await mediaApi.chunkedInit({
+        file_name: file.name,
+        mime_type: file.type,
+        file_size: file.size,
+        total_chunks: totalChunks,
+      });
+      const uploadId = initRes.upload_id;
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+        const chunkB64 = await blobToBase64(chunk);
+
+        let sent = false;
+        for (let attempt = 0; attempt < 3 && !sent; attempt++) {
+          try {
+            await mediaApi.chunkedPart({ upload_id: uploadId, chunk_index: i, chunk_data: chunkB64 });
+            sent = true;
+          } catch {
+            if (attempt === 2) throw new Error(`Не удалось загрузить часть ${i + 1}/${totalChunks}`);
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
+        setUploadProgress(prev => ({ ...prev, [assetId]: { current: i + 1, total: totalChunks } }));
+      }
+
+      const pid = useEditorStore.getState().project.id;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const completeRes: any = await mediaApi.chunkedComplete({
+        upload_id: uploadId,
+        duration,
+        project_id: pid,
+      });
+
+      if (completeRes.file?.cdn_url) {
+        const newId = `server_${completeRes.file.id}`;
+        useEditorStore.setState((s) => ({
+          assets: s.assets.map(a => a.id === assetId ? { ...a, url: completeRes.file.cdn_url, id: newId } : a),
+          tracks: s.tracks.map(t => ({
+            ...t,
+            clips: t.clips.map(c => c.assetId === assetId ? { ...c, assetId: newId } : c),
+          })),
+        }));
+      }
+      setUploadErrors(prev => prev.filter(x => x.assetId !== assetId));
+    } catch (e) {
+      console.error('Chunked upload failed:', e);
+      setUploadErrors(prev => [...prev, {
+        name: file.name,
+        error: String(e),
+        file,
+        assetId,
+        duration,
+        attempt: 3,
+        retrying: false,
+      }]);
+    } finally {
+      setUploading(prev => prev.filter(id => id !== assetId));
+      setUploadProgress(prev => { const n = { ...prev }; delete n[assetId]; return n; });
+    }
+  }, []);
+
   const retryUpload = useCallback((assetId: string) => {
     const err = uploadErrors.find(x => x.assetId === assetId);
     if (!err) return;
-    setUploadErrors(prev => prev.map(x => x.assetId === assetId ? { ...x, retrying: true, attempt: 0 } : x));
-    doUpload(err.file, err.assetId, err.duration, 1);
-  }, [uploadErrors, doUpload]);
+    setUploadErrors(prev => prev.filter(x => x.assetId !== assetId));
+    if (err.file.size > DIRECT_UPLOAD_LIMIT) {
+      doChunkedUpload(err.file, err.assetId, err.duration);
+    } else {
+      doUpload(err.file, err.assetId, err.duration, 1);
+    }
+  }, [uploadErrors, doUpload, doChunkedUpload]);
 
   const dismissError = useCallback((assetId: string) => {
     setUploadErrors(prev => prev.filter(x => x.assetId !== assetId));
@@ -267,7 +355,7 @@ const MediaPanel = () => {
     if (file.size > MAX_UPLOAD_SIZE) {
       setUploadErrors(prev => [...prev, {
         name: file.name,
-        error: `Файл слишком большой (${formatSize(file.size)}). Макс: ${formatSize(MAX_UPLOAD_SIZE)}`,
+        error: `Файл слишком большой (${formatSize(file.size)}). Макс: 150 МБ`,
         file,
         assetId: asset.id,
         duration,
@@ -278,8 +366,12 @@ const MediaPanel = () => {
       return;
     }
 
-    doUpload(file, asset.id, duration, 1);
-  }, [addAsset, isAuthenticated, doUpload]);
+    if (file.size > DIRECT_UPLOAD_LIMIT) {
+      doChunkedUpload(file, asset.id, duration);
+    } else {
+      doUpload(file, asset.id, duration, 1);
+    }
+  }, [addAsset, isAuthenticated, doUpload, doChunkedUpload]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -479,7 +571,7 @@ const MediaPanel = () => {
                     <Icon name="AlertTriangle" size={12} className="shrink-0" />
                   )}
                   <span className="truncate flex-1">
-                    {err.retrying ? `Повтор (${err.attempt}/3)... ${err.name}` : err.oversized ? `${err.name} — слишком большой (макс 10 МБ)` : `Ошибка: ${err.name}`}
+                    {err.retrying ? `Повтор (${err.attempt}/3)... ${err.name}` : err.oversized ? `${err.name} — слишком большой (макс 150 МБ)` : `Ошибка: ${err.name}`}
                   </span>
                   {!err.retrying && !err.oversized && (
                     <button onClick={() => retryUpload(err.assetId)} className="shrink-0 hover:text-red-300 transition-colors" title="Повторить">
@@ -493,6 +585,26 @@ const MediaPanel = () => {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+          {Object.keys(uploadProgress).length > 0 && (
+            <div className="px-2 pb-1 space-y-1">
+              {Object.entries(uploadProgress).map(([id, p]) => {
+                const asset = assets.find(a => a.id === id);
+                const pct = Math.round((p.current / p.total) * 100);
+                return (
+                  <div key={id} className="bg-blue-500/10 text-blue-400 text-[10px] px-2 py-1.5 rounded">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Icon name="Upload" size={12} className="shrink-0" />
+                      <span className="truncate flex-1">{asset?.name || 'Файл'}</span>
+                      <span className="shrink-0">{pct}%</span>
+                    </div>
+                    <div className="w-full h-1 bg-blue-500/20 rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
           <ScrollArea className="flex-1 px-2 editor-scrollbar">
