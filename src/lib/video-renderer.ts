@@ -4,6 +4,7 @@ import type {
   ExportSettings,
 } from "@/types/editor";
 import { media as mediaApi } from "@/lib/api";
+import { ensureFontLoaded } from "@/lib/google-fonts";
 
 type ProgressCallback = (progress: number, stage: string) => void;
 
@@ -42,6 +43,7 @@ interface ClipInfo {
   name: string;
   text?: string;
   fontSize?: number;
+  fontFamily?: string;
   fontColor?: string;
   fontWeight?: number;
   textShadow?: number;
@@ -101,6 +103,13 @@ export class VideoRenderer {
     for (const a of assets) assetMap.set(a.id, a);
 
     const clips = this.collectAllClips(tracks);
+
+    for (const c of clips) {
+      if (c.type === "text" && c.fontFamily) {
+        ensureFontLoaded(c.fontFamily);
+      }
+    }
+    await new Promise(r => setTimeout(r, 300));
 
     const imageCache = new Map<string, HTMLImageElement>();
 
@@ -275,7 +284,8 @@ export class VideoRenderer {
           this.ctx.globalAlpha = clip.opacity;
           const fontSize = Math.round((clip.fontSize || 48) * (height / 1080));
           const weight = clip.fontWeight || 600;
-          this.ctx.font = `${weight} ${fontSize}px sans-serif`;
+          const family = clip.fontFamily ? `"${clip.fontFamily}", sans-serif` : "sans-serif";
+          this.ctx.font = `${weight} ${fontSize}px ${family}`;
           this.ctx.textAlign = "center";
           this.ctx.textBaseline = "middle";
           const textContent = clip.text || clip.name;
@@ -394,6 +404,7 @@ export class VideoRenderer {
           name: clip.name,
           text: clip.text,
           fontSize: clip.fontSize,
+          fontFamily: clip.fontFamily,
           fontColor: clip.fontColor,
           fontWeight: clip.fontWeight,
           textShadow: clip.textShadow,

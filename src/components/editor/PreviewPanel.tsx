@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
 import { Slider } from '@/components/ui/slider';
+import { ensureFontLoaded } from '@/lib/google-fonts';
 
 const formatTimecode = (seconds: number, fps: number = 30): string => {
   const h = Math.floor(seconds / 3600);
@@ -26,6 +27,7 @@ interface ActiveClip {
   assetUrl?: string;
   text?: string;
   fontSize?: number;
+  fontFamily?: string;
   fontColor?: string;
   fontWeight?: number;
   textShadow?: number;
@@ -170,6 +172,7 @@ const PreviewPanel = () => {
             assetUrl: clip.assetId ? assetMap.get(clip.assetId) : undefined,
             text: clip.text,
             fontSize: clip.fontSize,
+            fontFamily: clip.fontFamily,
             fontColor: clip.fontColor,
             fontWeight: clip.fontWeight,
             textShadow: clip.textShadow,
@@ -598,6 +601,7 @@ const PreviewPanel = () => {
                 const weight = clip.fontWeight || 600;
                 const fontSize = Math.max(12, (clip.fontSize || 48) * 0.35);
                 const shadowStyle = shadow > 0 ? `0 2px ${shadow}px rgba(0,0,0,0.7)` : 'none';
+                const fontFamily = ensureFontLoaded(clip.fontFamily);
                 return (
                   <div
                     key={clip.id}
@@ -612,12 +616,13 @@ const PreviewPanel = () => {
                           opacity: clip.textBgOpacity ?? 0.6,
                         }}
                       >
-                        <span style={{ fontSize, visibility: 'hidden', fontWeight: weight }}>{clip.text || clip.name}</span>
+                        <span style={{ fontSize, visibility: 'hidden', fontWeight: weight, fontFamily }}>{clip.text || clip.name}</span>
                       </div>
                     )}
                     <span
                       style={{
                         fontSize,
+                        fontFamily,
                         color: clip.fontColor || '#ffffff',
                         fontWeight: weight,
                         textShadow: shadowStyle,

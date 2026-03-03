@@ -24,6 +24,7 @@ export interface TimelineClip {
   color?: string;
   text?: string;
   fontSize?: number;
+  fontFamily?: string;
   fontColor?: string;
   fontWeight?: number;
   textShadow?: number;

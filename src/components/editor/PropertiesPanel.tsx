@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
 import { Slider } from '@/components/ui/slider';
@@ -6,9 +7,12 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { getFontList, ensureFontLoaded } from '@/lib/google-fonts';
 
 const PropertiesPanel = () => {
   const { tracks, selectedClipId, updateClip, removeClip, duplicateClip, splitClip, currentTime } = useEditorStore();
+  const [fontPickerOpen, setFontPickerOpen] = useState(false);
+  const [fontSearch, setFontSearch] = useState('');
 
   const selectedClip = selectedClipId
     ? tracks.flatMap(t => t.clips).find(c => c.id === selectedClipId)
@@ -243,6 +247,56 @@ const PropertiesPanel = () => {
                     className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
                   />
                 </div>
+
+                <div className="relative">
+                  <Label className="text-[10px] text-muted-foreground">Шрифт</Label>
+                  <button
+                    onClick={() => { setFontPickerOpen(!fontPickerOpen); setFontSearch(''); }}
+                    className="w-full h-7 mt-0.5 px-2 text-xs text-left bg-secondary/50 border border-border rounded-md flex items-center justify-between hover:bg-secondary transition-colors"
+                  >
+                    <span style={{ fontFamily: ensureFontLoaded(selectedClip.fontFamily) }}>
+                      {selectedClip.fontFamily || 'Sans-serif'}
+                    </span>
+                    <Icon name={fontPickerOpen ? 'ChevronUp' : 'ChevronDown'} size={10} className="text-muted-foreground" />
+                  </button>
+                  {fontPickerOpen && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg overflow-hidden">
+                      <div className="p-1.5 border-b border-border">
+                        <Input
+                          value={fontSearch}
+                          onChange={e => setFontSearch(e.target.value)}
+                          placeholder="Поиск шрифта..."
+                          className="h-6 text-[10px] bg-secondary/50 border-border"
+                          autoFocus
+                        />
+                      </div>
+                      <div className="max-h-40 overflow-y-auto">
+                        {getFontList()
+                          .filter(f => !fontSearch || f.name.toLowerCase().includes(fontSearch.toLowerCase()))
+                          .map(font => (
+                            <button
+                              key={font.family}
+                              onClick={() => {
+                                ensureFontLoaded(font.family);
+                                updateClip(selectedClip.id, { fontFamily: font.google ? font.family : undefined });
+                                setFontPickerOpen(false);
+                              }}
+                              onMouseEnter={() => { if (font.google) ensureFontLoaded(font.family); }}
+                              className={`w-full text-left px-2 py-1.5 text-xs hover:bg-secondary transition-colors flex items-center justify-between ${
+                                (selectedClip.fontFamily || 'sans-serif') === font.family ? 'bg-primary/10 text-primary' : ''
+                              }`}
+                            >
+                              <span style={{ fontFamily: font.google ? `"${font.family}", sans-serif` : font.family }}>
+                                {font.name}
+                              </span>
+                              {font.google && <span className="text-[8px] text-muted-foreground/50">G</span>}
+                            </button>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-[10px] text-muted-foreground">Размер шрифта</Label>
