@@ -97,18 +97,23 @@ const PreviewPanel = () => {
   const assets = useEditorStore(s => s.assets);
   const previewFilter = useEditorStore(s => s.previewFilter);
   const selectedClipId = useEditorStore(s => s.selectedClipId);
+  const updateClip = useEditorStore(s => s.updateClip);
+  const selectClip = useEditorStore(s => s.selectClip);
 
   const [volume, setVolume] = useState(80);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [soundUnlocked, setSoundUnlocked] = useState(false);
   const [loadErrors, setLoadErrors] = useState<Set<string>>(new Set());
+  const [isDragging, setIsDragging] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const scrubbing = useRef(false);
   const progressBarRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ clipId: string; startMouseX: number; startMouseY: number; startPosX: number; startPosY: number } | null>(null);
 
   const assetMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -359,6 +364,45 @@ const PreviewPanel = () => {
     window.addEventListener('mouseup', onUp);
   }, [handleProgressSeek]);
 
+  const handleDragStart = useCallback((clipId: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const clip = activeClips.find(c => c.id === clipId);
+    if (!clip || (clip.type !== 'image' && clip.type !== 'video')) return;
+    selectClip(clipId);
+    dragRef.current = {
+      clipId,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      startPosX: clip.positionX,
+      startPosY: clip.positionY,
+    };
+    setIsDragging(true);
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current || !canvasRef.current) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const dx = ev.clientX - dragRef.current.startMouseX;
+      const dy = ev.clientY - dragRef.current.startMouseY;
+      const newX = dragRef.current.startPosX + (dx / rect.width) * 100;
+      const newY = dragRef.current.startPosY + (dy / rect.height) * 100;
+      updateClip(dragRef.current.clipId, {
+        positionX: Math.round(newX * 10) / 10,
+        positionY: Math.round(newY * 10) / 10,
+      });
+    };
+
+    const onUp = () => {
+      dragRef.current = null;
+      setIsDragging(false);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [activeClips, selectClip, updateClip]);
+
   const renderMediaClip = (clip: ActiveClip, i: number) => {
     const hasUrl = !!clip.assetUrl;
 
@@ -380,6 +424,7 @@ const PreviewPanel = () => {
         : '';
       const combinedTransform = [clip.transitionStyle, clipTransform].filter(Boolean).join(' ') || undefined;
       const fitClass = clip.fitMode === 'cover' ? 'object-cover' : clip.fitMode === 'fill' ? 'object-fill' : 'object-contain';
+      const isSelected = selectedClipId === clip.id;
       return (
         <div
           key={clip.id}
@@ -391,8 +436,26 @@ const PreviewPanel = () => {
             alt={clip.name}
             className={`w-full h-full ${fitClass}`}
             style={{ background: isBottomLayer ? '#0a0a0f' : 'transparent' }}
+            draggable={false}
             onError={() => setLoadErrors(prev => new Set(prev).add(clip.id))}
           />
+          <div
+            className="absolute inset-0 cursor-move"
+            style={{
+              outline: isSelected ? '2px solid hsl(var(--primary))' : 'none',
+              outlineOffset: '-2px',
+            }}
+            onMouseDown={(e) => handleDragStart(clip.id, e)}
+          >
+            {isSelected && (
+              <>
+                <div className="absolute top-0 left-0 w-2.5 h-2.5 bg-primary rounded-br-sm" />
+                <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-primary rounded-bl-sm" />
+                <div className="absolute bottom-0 left-0 w-2.5 h-2.5 bg-primary rounded-tr-sm" />
+                <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-primary rounded-tl-sm" />
+              </>
+            )}
+          </div>
         </div>
       );
     }
@@ -415,6 +478,7 @@ const PreviewPanel = () => {
         : '';
       const combinedTransform = [clip.transitionStyle, clipTransform].filter(Boolean).join(' ') || undefined;
       const fitClass = clip.fitMode === 'cover' ? 'object-cover' : clip.fitMode === 'fill' ? 'object-fill' : 'object-contain';
+      const isSelected = selectedClipId === clip.id;
       return (
         <div
           key={clip.id}
@@ -434,8 +498,26 @@ const PreviewPanel = () => {
             className={`w-full h-full ${fitClass}`}
             style={{ background: isBottomLayer ? '#0a0a0f' : 'transparent' }}
             playsInline
+            draggable={false}
             onError={() => setLoadErrors(prev => new Set(prev).add(clip.id))}
           />
+          <div
+            className="absolute inset-0 cursor-move"
+            style={{
+              outline: isSelected ? '2px solid hsl(var(--primary))' : 'none',
+              outlineOffset: '-2px',
+            }}
+            onMouseDown={(e) => handleDragStart(clip.id, e)}
+          >
+            {isSelected && (
+              <>
+                <div className="absolute top-0 left-0 w-2.5 h-2.5 bg-primary rounded-br-sm" />
+                <div className="absolute top-0 right-0 w-2.5 h-2.5 bg-primary rounded-bl-sm" />
+                <div className="absolute bottom-0 left-0 w-2.5 h-2.5 bg-primary rounded-tr-sm" />
+                <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-primary rounded-tl-sm" />
+              </>
+            )}
+          </div>
         </div>
       );
     }
@@ -483,6 +565,7 @@ const PreviewPanel = () => {
 
       <div className="flex-1 flex items-center justify-center p-2 min-h-0">
         <div
+          ref={canvasRef}
           className="relative w-full rounded overflow-hidden"
           style={{ aspectRatio: '16/9', maxHeight: '100%', background: '#0a0a0f' }}
         >
@@ -521,6 +604,15 @@ const PreviewPanel = () => {
               </div>
               <span className="text-[11px]">Нет активных клипов</span>
               <span className="text-[9px] mt-0.5 text-muted-foreground/30">Переместите плейхед на клип или нажмите Play</span>
+            </div>
+          )}
+
+          {isDragging && selectedClipId && (
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[200] bg-black/80 text-white text-[10px] font-mono px-2 py-1 rounded pointer-events-none">
+              {(() => {
+                const c = activeClips.find(a => a.id === selectedClipId);
+                return c ? `X: ${c.positionX.toFixed(1)}  Y: ${c.positionY.toFixed(1)}` : '';
+              })()}
             </div>
           )}
 
