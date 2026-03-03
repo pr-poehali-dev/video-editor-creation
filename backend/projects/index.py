@@ -170,7 +170,7 @@ def handler(event, context):
                 return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'id обязателен'})}
 
             cur = conn.cursor()
-            cur.execute("UPDATE projects SET is_public = FALSE, name = name || ' [удалён]' WHERE id = %s AND user_id = %s", (project_id, user['id']))
+            cur.execute("DELETE FROM projects WHERE id = %s AND user_id = %s", (project_id, user['id']))
             conn.commit()
             cur.close()
             conn.close()
