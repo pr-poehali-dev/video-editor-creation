@@ -602,7 +602,7 @@ const PreviewPanel = () => {
                   <div
                     key={clip.id}
                     className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                    style={{ opacity: clip.opacity, zIndex: 100 + i }}
+                    style={{ zIndex: 100 + i }}
                   >
                     {clip.textBg && (
                       <div
@@ -624,6 +624,7 @@ const PreviewPanel = () => {
                         WebkitTextStroke: stroke > 0 ? `${stroke}px ${strokeColor}` : undefined,
                         paintOrder: stroke > 0 ? 'stroke fill' : undefined,
                         position: 'relative',
+                        opacity: clip.opacity,
                       }}
                     >
                       {clip.text || clip.name}

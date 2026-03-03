@@ -86,7 +86,9 @@ const PropertiesPanel = () => {
 
             <div>
               <div className="flex justify-between">
-                <Label className="text-[10px] text-muted-foreground">Прозрачность</Label>
+                <Label className="text-[10px] text-muted-foreground">
+                  {selectedClip.type === 'text' ? 'Прозрачность текста' : 'Прозрачность'}
+                </Label>
                 <span className="text-[10px] text-muted-foreground">{Math.round(selectedClip.opacity * 100)}%</span>
               </div>
               <Slider
@@ -340,7 +342,7 @@ const PropertiesPanel = () => {
                 </div>
 
                 {selectedClip.textBg && (
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
                     <div>
                       <Label className="text-[10px] text-muted-foreground">Цвет фона</Label>
                       <Input
@@ -352,7 +354,7 @@ const PropertiesPanel = () => {
                     </div>
                     <div>
                       <div className="flex justify-between">
-                        <Label className="text-[10px] text-muted-foreground">Непрозр.</Label>
+                        <Label className="text-[10px] text-muted-foreground">Прозрачность фона</Label>
                         <span className="text-[10px] text-muted-foreground">{Math.round((selectedClip.textBgOpacity ?? 0.6) * 100)}%</span>
                       </div>
                       <Slider
