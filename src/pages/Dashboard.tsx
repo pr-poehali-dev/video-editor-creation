@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 
 interface Project {
   id: number;
@@ -58,6 +59,7 @@ const typeColors: Record<string, string> = {
 const Dashboard = () => {
   const { user, isAuthenticated, logout, loadProfile, updateProfile } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [myProjects, setMyProjects] = useState<Project[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -148,16 +150,23 @@ const Dashboard = () => {
     try {
       await projects.save({ id: renameProject.id, name: renameValue.trim() });
       setMyProjects(prev => prev.map(p => p.id === renameProject.id ? { ...p, name: renameValue.trim() } : p));
-    } catch { /* ignore */ }
+      toast({ title: 'Проект переименован', description: `Новое название: ${renameValue.trim()}` });
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось переименовать проект', variant: 'destructive' });
+    }
     setRenameProject(null);
   };
 
   const handleDeleteProject = async () => {
     if (!deleteProject) return;
+    const name = deleteProject.name;
     try {
       await projects.delete(deleteProject.id);
       setMyProjects(prev => prev.filter(p => p.id !== deleteProject.id));
-    } catch { /* ignore */ }
+      toast({ title: 'Проект удалён', description: `«${name}» удалён` });
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось удалить проект', variant: 'destructive' });
+    }
     setDeleteProject(null);
   };
 
