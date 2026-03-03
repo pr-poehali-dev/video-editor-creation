@@ -363,6 +363,7 @@ const PreviewPanel = () => {
         );
       }
       const clipPreview = selectedClipId === clip.id ? previewFilter : null;
+      const isBottomLayer = i === 0;
       return (
         <div
           key={clip.id}
@@ -373,7 +374,7 @@ const PreviewPanel = () => {
             src={clip.assetUrl}
             alt={clip.name}
             className="w-full h-full object-contain"
-            style={{ background: '#0a0a0f' }}
+            style={{ background: isBottomLayer ? '#0a0a0f' : 'transparent' }}
             onError={() => setLoadErrors(prev => new Set(prev).add(clip.id))}
           />
         </div>
@@ -383,7 +384,7 @@ const PreviewPanel = () => {
     if (clip.type === 'video' && hasUrl) {
       if (loadErrors.has(clip.id)) {
         return (
-          <div key={clip.id} className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: i, background: '#0a0a0f' }}>
+          <div key={clip.id} className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: i, background: i === 0 ? '#0a0a0f' : 'transparent' }}>
             <Icon name="AlertTriangle" size={28} className="text-red-400 mb-2" />
             <span className="text-[11px] text-red-400 font-medium">Не удалось загрузить видео</span>
             <span className="text-[9px] text-muted-foreground mt-0.5">{clip.name}</span>
@@ -391,6 +392,7 @@ const PreviewPanel = () => {
         );
       }
       const clipPreview = selectedClipId === clip.id ? previewFilter : null;
+      const isBottomLayer = i === 0;
       return (
         <div
           key={clip.id}
@@ -408,7 +410,7 @@ const PreviewPanel = () => {
             }}
             src={clip.assetUrl}
             className="w-full h-full object-contain"
-            style={{ background: '#0a0a0f' }}
+            style={{ background: isBottomLayer ? '#0a0a0f' : 'transparent' }}
             playsInline
             onError={() => setLoadErrors(prev => new Set(prev).add(clip.id))}
           />
