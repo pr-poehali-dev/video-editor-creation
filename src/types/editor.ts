@@ -25,6 +25,13 @@ export interface TimelineClip {
   text?: string;
   fontSize?: number;
   fontColor?: string;
+  fontWeight?: number;
+  textShadow?: number;
+  textStroke?: number;
+  textStrokeColor?: string;
+  textBg?: boolean;
+  textBgColor?: string;
+  textBgOpacity?: number;
   opacity: number;
   volume: number;
   speed: number;

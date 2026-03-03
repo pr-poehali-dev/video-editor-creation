@@ -252,7 +252,7 @@ const PropertiesPanel = () => {
                     />
                   </div>
                   <div>
-                    <Label className="text-[10px] text-muted-foreground">Цвет</Label>
+                    <Label className="text-[10px] text-muted-foreground">Цвет текста</Label>
                     <Input
                       type="color"
                       value={selectedClip.fontColor || '#ffffff'}
@@ -261,6 +261,110 @@ const PropertiesPanel = () => {
                     />
                   </div>
                 </div>
+
+                <div>
+                  <Label className="text-[10px] text-muted-foreground">Жирность</Label>
+                  <div className="flex gap-1 mt-1">
+                    {([[400, 'Обычный'], [600, 'Полужирный'], [800, 'Жирный']] as const).map(([w, label]) => (
+                      <button
+                        key={w}
+                        onClick={() => updateClip(selectedClip.id, { fontWeight: w })}
+                        className={`flex-1 py-1 text-[9px] rounded transition-colors ${
+                          (selectedClip.fontWeight || 600) === w
+                            ? 'bg-primary/20 text-primary border border-primary/30'
+                            : 'bg-secondary/50 text-muted-foreground hover:bg-secondary border border-transparent'
+                        }`}
+                        style={{ fontWeight: w }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <Separator className="bg-border/50" />
+              <div className="space-y-2">
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Оформление</span>
+
+                <div>
+                  <div className="flex justify-between">
+                    <Label className="text-[10px] text-muted-foreground">Тень</Label>
+                    <span className="text-[10px] text-muted-foreground">{selectedClip.textShadow ?? 8}px</span>
+                  </div>
+                  <Slider
+                    value={[selectedClip.textShadow ?? 8]}
+                    onValueChange={([v]) => updateClip(selectedClip.id, { textShadow: v })}
+                    min={0}
+                    max={30}
+                    step={1}
+                    className="mt-1"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between">
+                    <Label className="text-[10px] text-muted-foreground">Обводка</Label>
+                    <span className="text-[10px] text-muted-foreground">{selectedClip.textStroke ?? 0}px</span>
+                  </div>
+                  <Slider
+                    value={[selectedClip.textStroke ?? 0]}
+                    onValueChange={([v]) => updateClip(selectedClip.id, { textStroke: v })}
+                    min={0}
+                    max={10}
+                    step={1}
+                    className="mt-1"
+                  />
+                </div>
+
+                {(selectedClip.textStroke ?? 0) > 0 && (
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Цвет обводки</Label>
+                    <Input
+                      type="color"
+                      value={selectedClip.textStrokeColor || '#000000'}
+                      onChange={e => updateClip(selectedClip.id, { textStrokeColor: e.target.value })}
+                      className="h-7 mt-0.5 p-0.5 bg-secondary/50 border-border cursor-pointer"
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <Label className="text-[10px] text-muted-foreground">Фон под текстом</Label>
+                  <button
+                    onClick={() => updateClip(selectedClip.id, { textBg: !selectedClip.textBg })}
+                    className={`w-8 h-4 rounded-full transition-colors ${selectedClip.textBg ? 'bg-primary' : 'bg-secondary'}`}
+                  >
+                    <div className={`w-3 h-3 rounded-full bg-white transition-transform ${selectedClip.textBg ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
+
+                {selectedClip.textBg && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground">Цвет фона</Label>
+                      <Input
+                        type="color"
+                        value={selectedClip.textBgColor || '#000000'}
+                        onChange={e => updateClip(selectedClip.id, { textBgColor: e.target.value })}
+                        className="h-7 mt-0.5 p-0.5 bg-secondary/50 border-border cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between">
+                        <Label className="text-[10px] text-muted-foreground">Непрозр.</Label>
+                        <span className="text-[10px] text-muted-foreground">{Math.round((selectedClip.textBgOpacity ?? 0.6) * 100)}%</span>
+                      </div>
+                      <Slider
+                        value={[(selectedClip.textBgOpacity ?? 0.6) * 100]}
+                        onValueChange={([v]) => updateClip(selectedClip.id, { textBgOpacity: v / 100 })}
+                        max={100}
+                        step={1}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}

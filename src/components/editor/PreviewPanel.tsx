@@ -27,6 +27,13 @@ interface ActiveClip {
   text?: string;
   fontSize?: number;
   fontColor?: string;
+  fontWeight?: number;
+  textShadow?: number;
+  textStroke?: number;
+  textStrokeColor?: string;
+  textBg?: boolean;
+  textBgColor?: string;
+  textBgOpacity?: number;
   opacity: number;
   clipVolume: number;
   startTime: number;
@@ -164,6 +171,13 @@ const PreviewPanel = () => {
             text: clip.text,
             fontSize: clip.fontSize,
             fontColor: clip.fontColor,
+            fontWeight: clip.fontWeight,
+            textShadow: clip.textShadow,
+            textStroke: clip.textStroke,
+            textStrokeColor: clip.textStrokeColor,
+            textBg: clip.textBg,
+            textBgColor: clip.textBgColor,
+            textBgOpacity: clip.textBgOpacity,
             opacity: clip.opacity,
             clipVolume: clip.volume,
             startTime: clip.startTime,
@@ -577,25 +591,46 @@ const PreviewPanel = () => {
                   background: 'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.7) 100%)'
                 }} />
               )}
-              {textClips.map((clip, i) => (
-                <div
-                  key={clip.id}
-                  className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                  style={{ opacity: clip.opacity, zIndex: 100 + i }}
-                >
-                  <span
-                    className="drop-shadow-lg"
-                    style={{
-                      fontSize: Math.max(12, (clip.fontSize || 48) * 0.35),
-                      color: clip.fontColor || '#ffffff',
-                      fontWeight: 600,
-                      textShadow: '0 2px 8px rgba(0,0,0,0.7)',
-                    }}
+              {textClips.map((clip, i) => {
+                const shadow = clip.textShadow ?? 8;
+                const stroke = clip.textStroke ?? 0;
+                const strokeColor = clip.textStrokeColor || '#000000';
+                const weight = clip.fontWeight || 600;
+                const fontSize = Math.max(12, (clip.fontSize || 48) * 0.35);
+                const shadowStyle = shadow > 0 ? `0 2px ${shadow}px rgba(0,0,0,0.7)` : 'none';
+                return (
+                  <div
+                    key={clip.id}
+                    className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                    style={{ opacity: clip.opacity, zIndex: 100 + i }}
                   >
-                    {clip.text || clip.name}
-                  </span>
-                </div>
-              ))}
+                    {clip.textBg && (
+                      <div
+                        className="absolute rounded px-3 py-1"
+                        style={{
+                          backgroundColor: clip.textBgColor || '#000000',
+                          opacity: clip.textBgOpacity ?? 0.6,
+                        }}
+                      >
+                        <span style={{ fontSize, visibility: 'hidden', fontWeight: weight }}>{clip.text || clip.name}</span>
+                      </div>
+                    )}
+                    <span
+                      style={{
+                        fontSize,
+                        color: clip.fontColor || '#ffffff',
+                        fontWeight: weight,
+                        textShadow: shadowStyle,
+                        WebkitTextStroke: stroke > 0 ? `${stroke}px ${strokeColor}` : undefined,
+                        paintOrder: stroke > 0 ? 'stroke fill' : undefined,
+                        position: 'relative',
+                      }}
+                    >
+                      {clip.text || clip.name}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground/50">

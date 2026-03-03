@@ -43,6 +43,13 @@ interface ClipInfo {
   text?: string;
   fontSize?: number;
   fontColor?: string;
+  fontWeight?: number;
+  textShadow?: number;
+  textStroke?: number;
+  textStrokeColor?: string;
+  textBg?: boolean;
+  textBgColor?: string;
+  textBgOpacity?: number;
   trackMuted: boolean;
   filters: ClipFilter[];
   transition?: ClipTransition;
@@ -267,13 +274,45 @@ export class VideoRenderer {
           this.ctx.save();
           this.ctx.globalAlpha = clip.opacity;
           const fontSize = Math.round((clip.fontSize || 48) * (height / 1080));
-          this.ctx.font = `bold ${fontSize}px sans-serif`;
-          this.ctx.fillStyle = clip.fontColor || "#ffffff";
+          const weight = clip.fontWeight || 600;
+          this.ctx.font = `${weight} ${fontSize}px sans-serif`;
           this.ctx.textAlign = "center";
           this.ctx.textBaseline = "middle";
-          this.ctx.shadowColor = "rgba(0,0,0,0.7)";
-          this.ctx.shadowBlur = 8;
-          this.ctx.fillText(clip.text || clip.name, width / 2, height / 2);
+          const textContent = clip.text || clip.name;
+          const cx = width / 2;
+          const cy = height / 2;
+
+          if (clip.textBg) {
+            const metrics = this.ctx.measureText(textContent);
+            const tw = metrics.width + fontSize * 0.6;
+            const th = fontSize * 1.4;
+            this.ctx.save();
+            this.ctx.globalAlpha = clip.textBgOpacity ?? 0.6;
+            this.ctx.fillStyle = clip.textBgColor || "#000000";
+            this.ctx.beginPath();
+            this.ctx.roundRect(cx - tw / 2, cy - th / 2, tw, th, fontSize * 0.15);
+            this.ctx.fill();
+            this.ctx.restore();
+            this.ctx.globalAlpha = clip.opacity;
+          }
+
+          const shadowBlur = clip.textShadow ?? 8;
+          if (shadowBlur > 0) {
+            this.ctx.shadowColor = "rgba(0,0,0,0.7)";
+            this.ctx.shadowBlur = shadowBlur;
+          }
+
+          const stroke = clip.textStroke ?? 0;
+          if (stroke > 0) {
+            this.ctx.strokeStyle = clip.textStrokeColor || "#000000";
+            this.ctx.lineWidth = stroke * 2;
+            this.ctx.lineJoin = "round";
+            this.ctx.strokeText(textContent, cx, cy);
+            this.ctx.shadowBlur = 0;
+          }
+
+          this.ctx.fillStyle = clip.fontColor || "#ffffff";
+          this.ctx.fillText(textContent, cx, cy);
           this.ctx.restore();
         }
       }
@@ -356,6 +395,13 @@ export class VideoRenderer {
           text: clip.text,
           fontSize: clip.fontSize,
           fontColor: clip.fontColor,
+          fontWeight: clip.fontWeight,
+          textShadow: clip.textShadow,
+          textStroke: clip.textStroke,
+          textStrokeColor: clip.textStrokeColor,
+          textBg: clip.textBg,
+          textBgColor: clip.textBgColor,
+          textBgOpacity: clip.textBgOpacity,
           trackMuted: track.muted,
           filters: (clip.filters || []).map(f => ({ name: f.name, params: f.params })),
           transition: clip.transition,
