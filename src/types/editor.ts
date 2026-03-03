@@ -28,6 +28,11 @@ export interface TimelineClip {
   opacity: number;
   volume: number;
   speed: number;
+  positionX?: number;
+  positionY?: number;
+  scale?: number;
+  rotation?: number;
+  fitMode?: 'contain' | 'cover' | 'fill';
   filters: ClipFilter[];
   transition?: ClipTransition;
   keyframes: Keyframe[];

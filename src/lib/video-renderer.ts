@@ -46,6 +46,11 @@ interface ClipInfo {
   trackMuted: boolean;
   filters: ClipFilter[];
   transition?: ClipTransition;
+  positionX: number;
+  positionY: number;
+  scale: number;
+  rotation: number;
+  fitMode: 'contain' | 'cover' | 'fill';
 }
 
 export class VideoRenderer {
@@ -253,7 +258,7 @@ export class VideoRenderer {
             this.ctx.globalAlpha = fadeAlpha;
             this.applyCanvasFilters(clip.filters, width, height);
             this.applyTransitionTransform(clip.transition, elapsed, width, height);
-            this.drawImageFit(img, width, height);
+            this.drawImageWithTransform(img, width, height, clip);
             this.ctx.restore();
           }
         }
@@ -354,6 +359,11 @@ export class VideoRenderer {
           trackMuted: track.muted,
           filters: (clip.filters || []).map(f => ({ name: f.name, params: f.params })),
           transition: clip.transition,
+          positionX: clip.positionX ?? 50,
+          positionY: clip.positionY ?? 50,
+          scale: clip.scale ?? 100,
+          rotation: clip.rotation ?? 0,
+          fitMode: clip.fitMode || 'contain',
         });
       }
     }
@@ -380,22 +390,55 @@ export class VideoRenderer {
     });
   }
 
-  private drawImageFit(img: HTMLImageElement, canvasW: number, canvasH: number) {
+  private drawImageWithTransform(
+    img: HTMLImageElement,
+    canvasW: number,
+    canvasH: number,
+    clip: ClipInfo,
+  ) {
     if (!this.ctx) return;
     const imgRatio = img.naturalWidth / img.naturalHeight;
     const canvasRatio = canvasW / canvasH;
     let drawW: number, drawH: number, drawX: number, drawY: number;
 
-    if (imgRatio > canvasRatio) {
+    if (clip.fitMode === 'fill') {
       drawW = canvasW;
-      drawH = canvasW / imgRatio;
+      drawH = canvasH;
       drawX = 0;
+      drawY = 0;
+    } else if (clip.fitMode === 'cover') {
+      if (imgRatio > canvasRatio) {
+        drawH = canvasH;
+        drawW = canvasH * imgRatio;
+      } else {
+        drawW = canvasW;
+        drawH = canvasW / imgRatio;
+      }
+      drawX = (canvasW - drawW) / 2;
       drawY = (canvasH - drawH) / 2;
     } else {
-      drawH = canvasH;
-      drawW = canvasH * imgRatio;
+      if (imgRatio > canvasRatio) {
+        drawW = canvasW;
+        drawH = canvasW / imgRatio;
+      } else {
+        drawH = canvasH;
+        drawW = canvasH * imgRatio;
+      }
       drawX = (canvasW - drawW) / 2;
-      drawY = 0;
+      drawY = (canvasH - drawH) / 2;
+    }
+
+    const hasTransform = clip.positionX !== 50 || clip.positionY !== 50 || clip.scale !== 100 || clip.rotation !== 0;
+    if (hasTransform) {
+      const offsetX = (clip.positionX - 50) / 100 * canvasW;
+      const offsetY = (clip.positionY - 50) / 100 * canvasH;
+      const s = clip.scale / 100;
+      const centerX = canvasW / 2 + offsetX;
+      const centerY = canvasH / 2 + offsetY;
+      this.ctx.translate(centerX, centerY);
+      this.ctx.rotate((clip.rotation * Math.PI) / 180);
+      this.ctx.scale(s, s);
+      this.ctx.translate(-canvasW / 2, -canvasH / 2);
     }
 
     this.ctx.drawImage(img, drawX, drawY, drawW, drawH);

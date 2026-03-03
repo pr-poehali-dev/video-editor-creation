@@ -37,6 +37,11 @@ interface ActiveClip {
   filters: Array<{ name: string; type: string; params: Record<string, number | string | boolean> }>;
   fadeOpacity: number;
   transitionStyle: string;
+  positionX: number;
+  positionY: number;
+  scale: number;
+  rotation: number;
+  fitMode: 'contain' | 'cover' | 'fill';
 }
 
 const getFilterStyle = (filters: ActiveClip['filters'], previewFilter?: string | null): string => {
@@ -164,6 +169,11 @@ const PreviewPanel = () => {
             filters: clip.filters || [],
             fadeOpacity,
             transitionStyle,
+            positionX: clip.positionX ?? 50,
+            positionY: clip.positionY ?? 50,
+            scale: clip.scale ?? 100,
+            rotation: clip.rotation ?? 0,
+            fitMode: clip.fitMode || 'contain',
           });
         }
       }
@@ -364,16 +374,22 @@ const PreviewPanel = () => {
       }
       const clipPreview = selectedClipId === clip.id ? previewFilter : null;
       const isBottomLayer = i === 0;
+      const hasCustomTransform = clip.positionX !== 50 || clip.positionY !== 50 || clip.scale !== 100 || clip.rotation !== 0;
+      const clipTransform = hasCustomTransform
+        ? `translate(${clip.positionX - 50}%, ${clip.positionY - 50}%) scale(${clip.scale / 100}) rotate(${clip.rotation}deg)`
+        : '';
+      const combinedTransform = [clip.transitionStyle, clipTransform].filter(Boolean).join(' ') || undefined;
+      const fitClass = clip.fitMode === 'cover' ? 'object-cover' : clip.fitMode === 'fill' ? 'object-fill' : 'object-contain';
       return (
         <div
           key={clip.id}
           className="absolute inset-0"
-          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview), transform: clip.transitionStyle || undefined }}
+          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview), transform: combinedTransform }}
         >
           <img
             src={clip.assetUrl}
             alt={clip.name}
-            className="w-full h-full object-contain"
+            className={`w-full h-full ${fitClass}`}
             style={{ background: isBottomLayer ? '#0a0a0f' : 'transparent' }}
             onError={() => setLoadErrors(prev => new Set(prev).add(clip.id))}
           />
@@ -393,11 +409,17 @@ const PreviewPanel = () => {
       }
       const clipPreview = selectedClipId === clip.id ? previewFilter : null;
       const isBottomLayer = i === 0;
+      const hasCustomTransform = clip.positionX !== 50 || clip.positionY !== 50 || clip.scale !== 100 || clip.rotation !== 0;
+      const clipTransform = hasCustomTransform
+        ? `translate(${clip.positionX - 50}%, ${clip.positionY - 50}%) scale(${clip.scale / 100}) rotate(${clip.rotation}deg)`
+        : '';
+      const combinedTransform = [clip.transitionStyle, clipTransform].filter(Boolean).join(' ') || undefined;
+      const fitClass = clip.fitMode === 'cover' ? 'object-cover' : clip.fitMode === 'fill' ? 'object-fill' : 'object-contain';
       return (
         <div
           key={clip.id}
           className="absolute inset-0"
-          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview), transform: clip.transitionStyle || undefined }}
+          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview), transform: combinedTransform }}
         >
           <video
             ref={(el) => {
@@ -409,7 +431,7 @@ const PreviewPanel = () => {
               }
             }}
             src={clip.assetUrl}
-            className="w-full h-full object-contain"
+            className={`w-full h-full ${fitClass}`}
             style={{ background: isBottomLayer ? '#0a0a0f' : 'transparent' }}
             playsInline
             onError={() => setLoadErrors(prev => new Set(prev).add(clip.id))}

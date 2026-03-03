@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
 
 const PropertiesPanel = () => {
   const { tracks, selectedClipId, updateClip, removeClip, duplicateClip, splitClip, currentTime } = useEditorStore();
@@ -128,6 +129,104 @@ const PropertiesPanel = () => {
               />
             </div>
           </div>
+
+          {(selectedClip.type === 'image' || selectedClip.type === 'video') && (
+            <>
+              <Separator className="bg-border/50" />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Трансформация</span>
+                  {((selectedClip.positionX ?? 50) !== 50 || (selectedClip.positionY ?? 50) !== 50 || (selectedClip.scale ?? 100) !== 100 || (selectedClip.rotation ?? 0) !== 0) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-5 px-1.5 text-[9px] text-muted-foreground hover:text-foreground"
+                      onClick={() => updateClip(selectedClip.id, { positionX: 50, positionY: 50, scale: 100, rotation: 0 })}
+                    >
+                      <Icon name="RotateCcw" size={9} />
+                      <span className="ml-1">Сброс</span>
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">X позиция</Label>
+                    <Input
+                      type="number"
+                      value={selectedClip.positionX ?? 50}
+                      onChange={e => updateClip(selectedClip.id, { positionX: parseFloat(e.target.value) || 0 })}
+                      className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
+                      step="1"
+                      min="-100"
+                      max="200"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Y позиция</Label>
+                    <Input
+                      type="number"
+                      value={selectedClip.positionY ?? 50}
+                      onChange={e => updateClip(selectedClip.id, { positionY: parseFloat(e.target.value) || 0 })}
+                      className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
+                      step="1"
+                      min="-100"
+                      max="200"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between">
+                    <Label className="text-[10px] text-muted-foreground">Масштаб</Label>
+                    <span className="text-[10px] text-muted-foreground">{selectedClip.scale ?? 100}%</span>
+                  </div>
+                  <Slider
+                    value={[selectedClip.scale ?? 100]}
+                    onValueChange={([v]) => updateClip(selectedClip.id, { scale: v })}
+                    min={10}
+                    max={300}
+                    step={1}
+                    className="mt-1"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex justify-between">
+                    <Label className="text-[10px] text-muted-foreground">Поворот</Label>
+                    <span className="text-[10px] text-muted-foreground">{selectedClip.rotation ?? 0}°</span>
+                  </div>
+                  <Slider
+                    value={[selectedClip.rotation ?? 0]}
+                    onValueChange={([v]) => updateClip(selectedClip.id, { rotation: v })}
+                    min={-180}
+                    max={180}
+                    step={1}
+                    className="mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-[10px] text-muted-foreground">Режим заполнения</Label>
+                  <div className="flex gap-1 mt-1">
+                    {([['contain', 'Вписать'], ['cover', 'Заполнить'], ['fill', 'Растянуть']] as const).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        onClick={() => updateClip(selectedClip.id, { fitMode: mode })}
+                        className={`flex-1 py-1 text-[9px] rounded transition-colors ${
+                          (selectedClip.fitMode || 'contain') === mode
+                            ? 'bg-primary/20 text-primary border border-primary/30'
+                            : 'bg-secondary/50 text-muted-foreground hover:bg-secondary border border-transparent'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
 
           {selectedClip.type === 'text' && (
             <>
