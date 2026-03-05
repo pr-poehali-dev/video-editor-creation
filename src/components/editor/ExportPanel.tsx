@@ -8,11 +8,70 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import type { ExportSettings } from '@/types/editor';
 
+interface ExportPreset {
+  id: string;
+  icon: string;
+  label: string;
+  desc: string;
+  settings: Partial<ExportSettings>;
+}
+
+const presets: ExportPreset[] = [
+  {
+    id: 'social',
+    icon: 'Share2',
+    label: 'Соцсети',
+    desc: 'YouTube, VK, Instagram, TikTok',
+    settings: { format: 'mp4', quality: 'high', resolution: '1920x1080', fps: 30, codec: 'H.264', bitrate: 8000 },
+  },
+  {
+    id: 'email',
+    icon: 'Mail',
+    label: 'Отправка по почте',
+    desc: 'Лёгкий файл до 25 МБ',
+    settings: { format: 'mp4', quality: 'low', resolution: '1280x720', fps: 24, codec: 'H.264', bitrate: 2000 },
+  },
+  {
+    id: 'website',
+    icon: 'Globe',
+    label: 'Вставка на сайт',
+    desc: 'WebM, быстрая загрузка',
+    settings: { format: 'webm', quality: 'medium', resolution: '1920x1080', fps: 30, codec: 'VP9', bitrate: 4000 },
+  },
+  {
+    id: 'maxquality',
+    icon: 'Sparkles',
+    label: 'Максимальное качество',
+    desc: 'Без потерь, архив, монтаж',
+    settings: { format: 'mp4', quality: 'ultra', resolution: '1920x1080', fps: 30, codec: 'H.264', bitrate: 20000 },
+  },
+  {
+    id: 'gif',
+    icon: 'Image',
+    label: 'GIF-анимация',
+    desc: 'Мемы, стикеры, превью',
+    settings: { format: 'gif', quality: 'low', resolution: '480x270', fps: 12, codec: 'gif', bitrate: 0 },
+  },
+  {
+    id: 'custom',
+    icon: 'Settings',
+    label: 'Свои настройки',
+    desc: 'Полный контроль параметров',
+    settings: {},
+  },
+];
+
 const qualities: Array<{ value: ExportSettings['quality']; label: string; desc: string }> = [
   { value: 'low', label: 'Низкое', desc: '720p' },
   { value: 'medium', label: 'Среднее', desc: '1080p' },
   { value: 'high', label: 'Высокое', desc: '1080p HQ' },
   { value: 'ultra', label: 'Ультра', desc: '4K' },
+];
+
+const formats: Array<{ value: ExportSettings['format']; label: string; desc: string }> = [
+  { value: 'mp4', label: 'MP4 (H.264)', desc: 'Универсальный' },
+  { value: 'webm', label: 'WebM (VP9)', desc: 'Для веба' },
+  { value: 'gif', label: 'GIF', desc: 'Анимация' },
 ];
 
 const ExportPanel = () => {
@@ -25,10 +84,18 @@ const ExportPanel = () => {
   const [resultUrl, setResultUrl] = useState('');
   const [resultFileName, setResultFileName] = useState('');
   const [resultSize, setResultSize] = useState(0);
+  const [activePreset, setActivePreset] = useState('social');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rendererRef = useRef<any>(null);
 
   const clipCount = tracks.reduce((sum, t) => sum + t.clips.length, 0);
+
+  const selectPreset = useCallback((preset: ExportPreset) => {
+    setActivePreset(preset.id);
+    if (preset.id !== 'custom' && Object.keys(preset.settings).length > 0) {
+      setExportSettings(preset.settings);
+    }
+  }, [setExportSettings]);
 
   const handleExport = useCallback(async () => {
     if (clipCount === 0) return;
@@ -101,6 +168,9 @@ const ExportPanel = () => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const isGif = exportSettings.format === 'gif';
+  const resultIsGif = resultFileName?.endsWith('.gif');
+
   return (
     <div className="flex flex-col h-full editor-panel rounded-lg overflow-hidden">
       <div className="editor-panel-header px-3 py-1.5 flex items-center gap-2">
@@ -123,7 +193,7 @@ const ExportPanel = () => {
                 <Icon name="Check" size={28} className="text-green-400" />
               </div>
               <div className="text-center">
-                <p className="text-sm font-semibold">Видео готово!</p>
+                <p className="text-sm font-semibold">{resultIsGif ? 'GIF готов!' : 'Видео готово!'}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
                   {resultFileName} &bull; {formatSize(resultSize)}
                 </p>
@@ -131,12 +201,21 @@ const ExportPanel = () => {
 
               {resultUrl && (
                 <div className="rounded-lg overflow-hidden border border-border" style={{ background: 'hsl(var(--editor-bg))' }}>
-                  <video
-                    src={resultUrl}
-                    controls
-                    className="w-full max-h-[200px]"
-                    style={{ background: '#000' }}
-                  />
+                  {resultIsGif ? (
+                    <img
+                      src={resultUrl}
+                      alt="GIF preview"
+                      className="w-full max-h-[200px] object-contain"
+                      style={{ background: '#000' }}
+                    />
+                  ) : (
+                    <video
+                      src={resultUrl}
+                      controls
+                      className="w-full max-h-[200px]"
+                      style={{ background: '#000' }}
+                    />
+                  )}
                 </div>
               )}
 
@@ -145,7 +224,7 @@ const ExportPanel = () => {
                 className="w-full py-3 rounded-lg font-medium text-sm bg-green-600 text-white hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
               >
                 <Icon name="Download" size={16} />
-                Скачать видео
+                {resultIsGif ? 'Скачать GIF' : 'Скачать видео'}
               </button>
 
               <button
@@ -187,63 +266,125 @@ const ExportPanel = () => {
                 </div>
               )}
 
-              <Separator className="bg-border/50" />
-
               <div>
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Формат</Label>
-                <div className="grid grid-cols-2 gap-1 mt-1">
-                  {([
-                    { value: 'mp4' as const, label: 'MP4 (H.264)', desc: 'Для ТВ, телефонов, соцсетей' },
-                    { value: 'webm' as const, label: 'WebM (VP9)', desc: 'Для браузеров, легче' },
-                  ]).map(f => (
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Для чего экспортируем?</Label>
+                <div className="grid grid-cols-1 gap-1 mt-1.5">
+                  {presets.map(p => (
                     <button
-                      key={f.value}
-                      onClick={() => setExportSettings({ format: f.value, codec: f.value === 'mp4' ? 'H.264' : 'VP9' })}
-                      className={`p-2 rounded text-left transition-colors ${exportSettings.format === f.value ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 hover:bg-secondary'}`}
+                      key={p.id}
+                      onClick={() => selectPreset(p)}
+                      className={`flex items-center gap-2.5 p-2 rounded text-left transition-colors ${activePreset === p.id ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 hover:bg-secondary'}`}
                     >
-                      <div className="text-xs font-medium">{f.label}</div>
-                      <div className={`text-[9px] ${exportSettings.format === f.value ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{f.desc}</div>
+                      <div className={`w-8 h-8 rounded flex items-center justify-center flex-shrink-0 ${activePreset === p.id ? 'bg-primary-foreground/15' : 'bg-background/50'}`}>
+                        <Icon name={p.icon} size={16} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium">{p.label}</div>
+                        <div className={`text-[9px] truncate ${activePreset === p.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{p.desc}</div>
+                      </div>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Качество</Label>
-                <div className="grid grid-cols-2 gap-1 mt-1">
-                  {qualities.map(q => (
-                    <button
-                      key={q.value}
-                      onClick={() => setExportSettings({ quality: q.value })}
-                      className={`p-2 rounded text-left transition-colors ${exportSettings.quality === q.value ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 hover:bg-secondary'}`}
-                    >
-                      <div className="text-xs font-medium">{q.label}</div>
-                      <div className="text-[9px] opacity-70">{q.desc}</div>
-                    </button>
-                  ))}
+              {activePreset !== 'custom' && (
+                <div className="px-2 py-1.5 rounded text-[10px] text-muted-foreground" style={{ background: 'hsl(var(--editor-bg))' }}>
+                  <div className="flex items-center justify-between">
+                    <span>Формат:</span>
+                    <span className="font-medium text-foreground">{exportSettings.format.toUpperCase()}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <span>Разрешение:</span>
+                    <span className="font-medium text-foreground">{exportSettings.resolution}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <span>FPS:</span>
+                    <span className="font-medium text-foreground">{exportSettings.fps}</span>
+                  </div>
+                  {!isGif && (
+                    <div className="flex items-center justify-between mt-0.5">
+                      <span>Битрейт:</span>
+                      <span className="font-medium text-foreground">{exportSettings.bitrate} kbps</span>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-[10px] text-muted-foreground">FPS</Label>
-                  <Input
-                    type="number"
-                    value={exportSettings.fps}
-                    onChange={e => setExportSettings({ fps: parseInt(e.target.value) || 30 })}
-                    className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
-                  />
-                </div>
-                <div>
-                  <Label className="text-[10px] text-muted-foreground">Битрейт (kbps)</Label>
-                  <Input
-                    type="number"
-                    value={exportSettings.bitrate}
-                    onChange={e => setExportSettings({ bitrate: parseInt(e.target.value) || 8000 })}
-                    className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
-                  />
-                </div>
-              </div>
+              {activePreset === 'custom' && (
+                <>
+                  <Separator className="bg-border/50" />
+
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Формат</Label>
+                    <div className="grid grid-cols-3 gap-1 mt-1">
+                      {formats.map(f => (
+                        <button
+                          key={f.value}
+                          onClick={() => {
+                            const codec = f.value === 'mp4' ? 'H.264' : f.value === 'webm' ? 'VP9' : 'gif';
+                            setExportSettings({ format: f.value, codec });
+                          }}
+                          className={`p-2 rounded text-center transition-colors ${exportSettings.format === f.value ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 hover:bg-secondary'}`}
+                        >
+                          <div className="text-xs font-medium">{f.label}</div>
+                          <div className={`text-[9px] ${exportSettings.format === f.value ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{f.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {!isGif && (
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Качество</Label>
+                      <div className="grid grid-cols-2 gap-1 mt-1">
+                        {qualities.map(q => (
+                          <button
+                            key={q.value}
+                            onClick={() => setExportSettings({ quality: q.value })}
+                            className={`p-2 rounded text-left transition-colors ${exportSettings.quality === q.value ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 hover:bg-secondary'}`}
+                          >
+                            <div className="text-xs font-medium">{q.label}</div>
+                            <div className="text-[9px] opacity-70">{q.desc}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground">Разрешение</Label>
+                      <Input
+                        value={exportSettings.resolution}
+                        onChange={e => setExportSettings({ resolution: e.target.value })}
+                        placeholder="1920x1080"
+                        className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground">FPS</Label>
+                      <Input
+                        type="number"
+                        value={exportSettings.fps}
+                        onChange={e => setExportSettings({ fps: parseInt(e.target.value) || 30 })}
+                        className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
+                      />
+                    </div>
+                  </div>
+
+                  {!isGif && (
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground">Битрейт (kbps)</Label>
+                      <Input
+                        type="number"
+                        value={exportSettings.bitrate}
+                        onChange={e => setExportSettings({ bitrate: parseInt(e.target.value) || 8000 })}
+                        className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
 
               <Separator className="bg-border/50" />
 
@@ -253,7 +394,7 @@ const ExportPanel = () => {
                 className="w-full py-3 rounded-lg font-medium text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 <Icon name="Rocket" size={16} />
-                Создать видео
+                {isGif ? 'Создать GIF' : 'Создать видео'}
               </button>
 
               {clipCount === 0 && (

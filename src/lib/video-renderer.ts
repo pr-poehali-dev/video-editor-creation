@@ -6,6 +6,7 @@ import type {
 import { media as mediaApi } from "@/lib/api";
 import { ensureFontLoaded } from "@/lib/google-fonts";
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 
 type ProgressCallback = (progress: number, stage: string) => void;
 
@@ -159,7 +160,13 @@ export class VideoRenderer {
       console.warn("WebCodecs API (VideoEncoder) is not available. Falling back to WebM export.");
     }
 
-    if (useMp4) {
+    if (exportSettings.format === "gif") {
+      return this.renderGif(
+        clips, imageCache,
+        width, height, fps, totalDuration,
+        report
+      );
+    } else if (useMp4) {
       return this.renderMp4(
         clips, audioClips, assetMap, imageCache,
         width, height, fps, totalDuration, bitrate,
@@ -172,6 +179,59 @@ export class VideoRenderer {
         exportSettings, report
       );
     }
+  }
+
+  private async renderGif(
+    clips: ClipInfo[],
+    imageCache: Map<string, HTMLImageElement>,
+    width: number,
+    height: number,
+    fps: number,
+    totalDuration: number,
+    report: (progress: number, stage: string) => void
+  ): Promise<RenderResult> {
+    const canvas = this.canvas!;
+    const ctx = this.ctx!;
+    const totalFrames = Math.ceil(totalDuration * fps);
+    const delayMs = Math.round(1000 / fps);
+
+    const gif = GIFEncoder();
+
+    report(0.25, "Рендеринг GIF");
+
+    for (let frame = 0; frame <= totalFrames; frame++) {
+      if (this.cancelled) throw new Error("Отменено");
+
+      const currentTime = frame / fps;
+      const progress = 0.25 + (frame / totalFrames) * 0.65;
+      if (frame % Math.max(1, Math.floor(fps / 2)) === 0) {
+        report(progress, "Рендеринг GIF");
+      }
+
+      this.renderFrameToCanvas(ctx, canvas, clips, imageCache, currentTime, width, height);
+
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const palette = quantize(imageData.data, 256);
+      const index = applyPalette(imageData.data, palette);
+
+      gif.writeFrame(index, width, height, { palette, delay: delayMs });
+
+      if (frame % 10 === 0) {
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    report(0.92, "Финализация GIF");
+
+    gif.finish();
+
+    const blob = new Blob([gif.bytes()], { type: "image/gif" });
+    const url = URL.createObjectURL(blob);
+    const fileName = `animation_${Date.now()}.gif`;
+
+    report(1, "Готово");
+
+    return { blob, url, fileName };
   }
 
   private async renderMp4(
