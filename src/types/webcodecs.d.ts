@@ -25,7 +25,9 @@ declare class VideoEncoder {
   encode(frame: VideoFrame, options?: { keyFrame?: boolean }): void;
   flush(): Promise<void>;
   close(): void;
+  readonly state: 'unconfigured' | 'configured' | 'closed';
   readonly encodeQueueSize: number;
+  static isConfigSupported(config: VideoEncoderConfig): Promise<{ supported: boolean; config: VideoEncoderConfig }>;
 }
 
 declare class VideoFrame {
@@ -81,7 +83,9 @@ declare class AudioEncoder {
   encode(data: AudioData): void;
   flush(): Promise<void>;
   close(): void;
+  readonly state: 'unconfigured' | 'configured' | 'closed';
   readonly encodeQueueSize: number;
+  static isConfigSupported(config: AudioEncoderConfig): Promise<{ supported: boolean; config: AudioEncoderConfig }>;
 }
 
 declare class EncodedAudioChunk {

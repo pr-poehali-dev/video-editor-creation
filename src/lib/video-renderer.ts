@@ -252,9 +252,29 @@ export class VideoRenderer {
     const totalFrames = Math.ceil(totalDuration * fps);
     const frameDurationUs = Math.round(1_000_000 / fps);
 
-    const avcCodec = "avc1.42001f";
+    const videoConfig: VideoEncoderConfig = {
+      codec: "avc1.42001f",
+      width,
+      height,
+      bitrate,
+      framerate: fps,
+    };
 
-    // --- Load audio buffers using a temporary AudioContext for decoding ---
+    if (VideoEncoder.isConfigSupported) {
+      try {
+        const support = await VideoEncoder.isConfigSupported(videoConfig);
+        if (!support.supported) {
+          console.warn("VideoEncoder config not supported, falling back to WebM");
+          return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+        }
+      } catch {
+        console.warn("isConfigSupported check failed, falling back to WebM");
+        return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+      }
+    }
+
+    report(0.22, "Загрузка аудио");
+
     const tempAudioCtx = new AudioContext();
     const audioBufferMap = new Map<string, AudioBuffer>();
 
@@ -276,12 +296,10 @@ export class VideoRenderer {
 
     await tempAudioCtx.close();
 
-    // --- Determine if we have audio ---
     const hasAudio = audioClips.some(ac => ac.assetId && audioBufferMap.has(ac.assetId));
     const audioSampleRate = 48000;
     const audioChannels = 2;
 
-    // --- Create Muxer ---
     const muxer = new Muxer({
       target: new ArrayBufferTarget(),
       video: {
@@ -300,25 +318,27 @@ export class VideoRenderer {
       fastStart: 'in-memory',
     });
 
-    // --- Video Encoder ---
+    let videoEncoderFailed = false;
+
     const videoEncoder = new VideoEncoder({
       output: (chunk, meta) => {
         muxer.addVideoChunk(chunk, meta);
       },
       error: (e) => {
         console.error("VideoEncoder error:", e);
+        videoEncoderFailed = true;
       },
     });
 
-    videoEncoder.configure({
-      codec: avcCodec,
-      width,
-      height,
-      bitrate,
-      framerate: fps,
-    });
+    videoEncoder.configure(videoConfig);
 
-    // --- Render video frames synchronously ---
+    await new Promise(r => setTimeout(r, 50));
+
+    if (videoEncoderFailed || videoEncoder.state === 'closed') {
+      console.warn("VideoEncoder closed after configure, falling back to WebM");
+      return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+    }
+
     report(0.25, "Рендеринг видео (MP4)");
 
     for (let frame = 0; frame <= totalFrames; frame++) {
@@ -327,17 +347,21 @@ export class VideoRenderer {
         throw new Error("Отменено");
       }
 
+      if (videoEncoderFailed || videoEncoder.state === 'closed') {
+        console.warn("VideoEncoder closed mid-render, falling back to WebM");
+        return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+      }
+
       const currentTime = frame / fps;
       const progress = 0.25 + (frame / totalFrames) * 0.60;
       if (frame % Math.max(1, Math.floor(fps / 2)) === 0) {
         report(progress, "Рендеринг видео (MP4)");
       }
 
-      // Wait for encoder queue to drain if backpressured
       if (videoEncoder.encodeQueueSize > 10) {
         await new Promise<void>(resolve => {
           const check = () => {
-            if (videoEncoder.encodeQueueSize <= 5) {
+            if (videoEncoderFailed || videoEncoder.state === 'closed' || videoEncoder.encodeQueueSize <= 5) {
               resolve();
             } else {
               setTimeout(check, 1);
@@ -345,6 +369,10 @@ export class VideoRenderer {
           };
           check();
         });
+        if (videoEncoderFailed || videoEncoder.state === 'closed') {
+          console.warn("VideoEncoder closed during backpressure, falling back to WebM");
+          return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+        }
       }
 
       this.renderFrameToCanvas(ctx, canvas, clips, imageCache, currentTime, width, height);
@@ -357,7 +385,6 @@ export class VideoRenderer {
       videoEncoder.encode(videoFrame, { keyFrame });
       videoFrame.close();
 
-      // Yield to event loop periodically
       if (frame % 30 === 0) {
         await new Promise(r => setTimeout(r, 0));
       }
