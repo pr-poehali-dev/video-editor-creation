@@ -43,7 +43,7 @@ const presets: ExportPreset[] = [
     icon: 'Sparkles',
     label: 'Максимальное качество',
     desc: 'Без потерь, архив, монтаж',
-    settings: { format: 'mp4', quality: 'ultra', resolution: '1920x1080', fps: 30, codec: 'H.264', bitrate: 20000 },
+    settings: { format: 'mp4', quality: 'ultra', resolution: '3840x2160', fps: 30, codec: 'H.264', bitrate: 20000 },
   },
   {
     id: 'gif',
@@ -61,11 +61,11 @@ const presets: ExportPreset[] = [
   },
 ];
 
-const qualities: Array<{ value: ExportSettings['quality']; label: string; desc: string }> = [
-  { value: 'low', label: 'Низкое', desc: '720p' },
-  { value: 'medium', label: 'Среднее', desc: '1080p' },
-  { value: 'high', label: 'Высокое', desc: '1080p HQ' },
-  { value: 'ultra', label: 'Ультра', desc: '4K' },
+const qualities: Array<{ value: ExportSettings['quality']; label: string; desc: string; resolution: string }> = [
+  { value: 'low', label: 'Низкое', desc: '720p', resolution: '1280x720' },
+  { value: 'medium', label: 'Среднее', desc: '1080p', resolution: '1920x1080' },
+  { value: 'high', label: 'Высокое', desc: '1080p HQ', resolution: '1920x1080' },
+  { value: 'ultra', label: 'Ультра', desc: '4K', resolution: '3840x2160' },
 ];
 
 const formats: Array<{ value: ExportSettings['format']; label: string; desc: string }> = [
@@ -340,7 +340,7 @@ const ExportPanel = () => {
                         {qualities.map(q => (
                           <button
                             key={q.value}
-                            onClick={() => setExportSettings({ quality: q.value })}
+                            onClick={() => setExportSettings({ quality: q.value, resolution: q.resolution })}
                             className={`p-2 rounded text-left transition-colors ${exportSettings.quality === q.value ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 hover:bg-secondary'}`}
                           >
                             <div className="text-xs font-medium">{q.label}</div>

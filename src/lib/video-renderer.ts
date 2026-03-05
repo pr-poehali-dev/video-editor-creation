@@ -22,8 +22,15 @@ const QUALITY_MAP: Record<ExportSettings["quality"], { width: number; height: nu
   low: { width: 1280, height: 720, bitrate: 2_000_000 },
   medium: { width: 1920, height: 1080, bitrate: 5_000_000 },
   high: { width: 1920, height: 1080, bitrate: 8_000_000 },
-  ultra: { width: 1920, height: 1080, bitrate: 12_000_000 },
+  ultra: { width: 3840, height: 2160, bitrate: 20_000_000 },
 };
+
+function getH264Codec(width: number, height: number): string {
+  const pixels = width * height;
+  if (pixels > 1920 * 1080) return 'avc1.640033';
+  if (pixels > 1280 * 720) return 'avc1.640028';
+  return 'avc1.64001f';
+}
 
 interface ClipFilter {
   name: string;
@@ -252,8 +259,9 @@ export class VideoRenderer {
     const totalFrames = Math.ceil(totalDuration * fps);
     const frameDurationUs = Math.round(1_000_000 / fps);
 
+    const h264Codec = getH264Codec(width, height);
     const videoConfig: VideoEncoderConfig = {
-      codec: "avc1.42001f",
+      codec: h264Codec,
       width,
       height,
       bitrate,
@@ -264,12 +272,24 @@ export class VideoRenderer {
       try {
         const support = await VideoEncoder.isConfigSupported(videoConfig);
         if (!support.supported) {
-          console.warn("VideoEncoder config not supported, falling back to WebM");
-          return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+          const fallbackCodecs = ['avc1.42E01E', 'avc1.420028', 'avc1.42001f'];
+          let found = false;
+          for (const fc of fallbackCodecs) {
+            const altConfig = { ...videoConfig, codec: fc };
+            const altSupport = await VideoEncoder.isConfigSupported(altConfig);
+            if (altSupport.supported) {
+              videoConfig.codec = fc;
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            console.warn("No supported H.264 codec found, falling back to WebM");
+            return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+          }
         }
       } catch {
-        console.warn("isConfigSupported check failed, falling back to WebM");
-        return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+        console.warn("isConfigSupported check failed, trying encoding anyway");
       }
     }
 
@@ -761,10 +781,9 @@ export class VideoRenderer {
   private parseResolution(resolution: string, defaultW: number, defaultH: number): [number, number] {
     const match = resolution.match(/^(\d+)\s*[xX×]\s*(\d+)$/);
     if (match) {
-      const w = parseInt(match[1], 10);
-      const h = parseInt(match[2], 10);
-      if (w <= 1920 && h <= 1080) return [w, h];
-      return [1920, 1080];
+      const w = Math.min(parseInt(match[1], 10), 3840);
+      const h = Math.min(parseInt(match[2], 10), 2160);
+      if (w > 0 && h > 0) return [w, h];
     }
     return [defaultW, defaultH];
   }
