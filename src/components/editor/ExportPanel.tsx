@@ -79,6 +79,7 @@ const ExportPanel = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStage, setExportStage] = useState('');
+  const [exportActualFormat, setExportActualFormat] = useState('');
   const [exportDone, setExportDone] = useState(false);
   const [exportError, setExportError] = useState('');
   const [resultUrl, setResultUrl] = useState('');
@@ -103,6 +104,7 @@ const ExportPanel = () => {
     setIsExporting(true);
     setExportProgress(0);
     setExportStage('Подготовка...');
+    setExportActualFormat('');
     setExportDone(false);
     setExportError('');
     setResultUrl('');
@@ -122,6 +124,9 @@ const ExportPanel = () => {
         (progress, stage) => {
           setExportProgress(Math.round(progress * 100));
           setExportStage(stage);
+          if (stage.includes('MP4')) setExportActualFormat('MP4');
+          else if (stage.includes('WebM')) setExportActualFormat('WebM');
+          else if (stage.includes('GIF')) setExportActualFormat('GIF');
         }
       );
 
@@ -243,6 +248,20 @@ const ExportPanel = () => {
                 <p className="text-sm font-semibold">{exportStage}</p>
                 <p className="text-2xl font-bold mt-1">{exportProgress}%</p>
               </div>
+              {exportActualFormat && (
+                <div className="flex items-center justify-center gap-2">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    exportActualFormat === 'MP4' ? 'bg-emerald-500/20 text-emerald-400' :
+                    exportActualFormat === 'GIF' ? 'bg-purple-500/20 text-purple-400' :
+                    'bg-blue-500/20 text-blue-400'
+                  }`}>
+                    {exportActualFormat}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {exportSettings.resolution} · {exportSettings.fps} FPS
+                  </span>
+                </div>
+              )}
               <Progress value={exportProgress} className="h-2" />
               <p className="text-[10px] text-muted-foreground text-center">
                 Рендеринг выполняется прямо в браузере
