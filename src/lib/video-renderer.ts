@@ -252,8 +252,7 @@ export class VideoRenderer {
     const totalFrames = Math.ceil(totalDuration * fps);
     const frameDurationUs = Math.round(1_000_000 / fps);
 
-    const isHighQuality = exportSettings.quality === "high" || exportSettings.quality === "ultra";
-    const avcCodec = isHighQuality ? "avc1.640032" : "avc1.42001f";
+    const avcCodec = "avc1.42001f";
 
     // --- Load audio buffers using a temporary AudioContext for decoding ---
     const tempAudioCtx = new AudioContext();
@@ -397,55 +396,62 @@ export class VideoRenderer {
 
       const renderedAudioBuffer = await offlineCtx.startRendering();
 
-      // Encode rendered audio with AudioEncoder
-      const audioEncoder = new AudioEncoder({
-        output: (chunk, meta) => {
-          muxer.addAudioChunk(chunk, meta);
-        },
-        error: (e) => {
-          console.error("AudioEncoder error:", e);
-        },
-      });
+      try {
+        let audioEncoderFailed = false;
 
-      audioEncoder.configure({
-        codec: 'aac',
-        sampleRate: audioSampleRate,
-        numberOfChannels: audioChannels,
-        bitrate: 128_000,
-      });
-
-      // Convert AudioBuffer to interleaved Float32 and feed as AudioData chunks
-      const totalSamples = renderedAudioBuffer.length;
-      const chunkSize = 1024; // frames per audio chunk
-
-      for (let offset = 0; offset < totalSamples; offset += chunkSize) {
-        if (this.cancelled) {
-          audioEncoder.close();
-          throw new Error("Отменено");
-        }
-
-        const framesInChunk = Math.min(chunkSize, totalSamples - offset);
-
-        const audioData = new AudioData({
-          format: 'f32-planar',
-          sampleRate: audioSampleRate,
-          numberOfFrames: framesInChunk,
-          numberOfChannels: audioChannels,
-          timestamp: Math.round((offset / audioSampleRate) * 1_000_000),
-          data: this.createPlanarAudioBuffer(renderedAudioBuffer, offset, framesInChunk, audioChannels),
+        const audioEncoder = new AudioEncoder({
+          output: (chunk, meta) => {
+            muxer.addAudioChunk(chunk, meta);
+          },
+          error: (e) => {
+            console.error("AudioEncoder error:", e);
+            audioEncoderFailed = true;
+          },
         });
 
-        audioEncoder.encode(audioData);
-        audioData.close();
+        audioEncoder.configure({
+          codec: 'mp4a.40.2',
+          sampleRate: audioSampleRate,
+          numberOfChannels: audioChannels,
+          bitrate: 128_000,
+        });
 
-        // Yield periodically
-        if ((offset / chunkSize) % 50 === 0) {
-          await new Promise(r => setTimeout(r, 0));
+        const totalSamples = renderedAudioBuffer.length;
+        const chunkSize = 1024;
+
+        for (let offset = 0; offset < totalSamples; offset += chunkSize) {
+          if (this.cancelled) {
+            audioEncoder.close();
+            throw new Error("Отменено");
+          }
+          if (audioEncoderFailed) break;
+
+          const framesInChunk = Math.min(chunkSize, totalSamples - offset);
+
+          const audioData = new AudioData({
+            format: 'f32-planar',
+            sampleRate: audioSampleRate,
+            numberOfFrames: framesInChunk,
+            numberOfChannels: audioChannels,
+            timestamp: Math.round((offset / audioSampleRate) * 1_000_000),
+            data: this.createPlanarAudioBuffer(renderedAudioBuffer, offset, framesInChunk, audioChannels),
+          });
+
+          audioEncoder.encode(audioData);
+          audioData.close();
+
+          if ((offset / chunkSize) % 50 === 0) {
+            await new Promise(r => setTimeout(r, 0));
+          }
         }
-      }
 
-      await audioEncoder.flush();
-      audioEncoder.close();
+        if (!audioEncoderFailed) {
+          await audioEncoder.flush();
+        }
+        audioEncoder.close();
+      } catch (audioErr) {
+        console.warn("Audio encoding failed, producing video without audio:", audioErr);
+      }
     }
 
     report(0.95, "Финализация MP4");
