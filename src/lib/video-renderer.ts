@@ -5,6 +5,7 @@ import type {
 } from "@/types/editor";
 import { media as mediaApi } from "@/lib/api";
 import { ensureFontLoaded } from "@/lib/google-fonts";
+import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 
 type ProgressCallback = (progress: number, stage: string) => void;
 
@@ -141,8 +142,396 @@ export class VideoRenderer {
 
     report(0.2, "Подготовка аудио");
 
-    const isWebm = exportSettings.format === "webm" || exportSettings.format === "gif";
-    const mimeType = isWebm ? "video/webm;codecs=vp9,opus" : "video/webm;codecs=vp9,opus";
+    const audioClips = clips.filter(c => {
+      if (c.trackMuted) return false;
+      const asset = c.assetId ? assetMap.get(c.assetId) : null;
+      return asset?.type === "audio";
+    });
+
+    const bitrate = exportSettings.bitrate > 0 ? exportSettings.bitrate * 1000 : quality.bitrate;
+
+    const useMp4 =
+      exportSettings.format === "mp4" &&
+      typeof VideoEncoder !== "undefined" &&
+      typeof VideoFrame !== "undefined";
+
+    if (exportSettings.format === "mp4" && !useMp4) {
+      console.warn("WebCodecs API (VideoEncoder) is not available. Falling back to WebM export.");
+    }
+
+    if (useMp4) {
+      return this.renderMp4(
+        clips, audioClips, assetMap, imageCache,
+        width, height, fps, totalDuration, bitrate,
+        exportSettings, report
+      );
+    } else {
+      return this.renderWebm(
+        clips, audioClips, assetMap, imageCache,
+        width, height, fps, totalDuration, bitrate,
+        exportSettings, report
+      );
+    }
+  }
+
+  private async renderMp4(
+    clips: ClipInfo[],
+    audioClips: ClipInfo[],
+    assetMap: Map<string, MediaAsset>,
+    imageCache: Map<string, HTMLImageElement>,
+    width: number,
+    height: number,
+    fps: number,
+    totalDuration: number,
+    bitrate: number,
+    exportSettings: ExportSettings,
+    report: (progress: number, stage: string) => void
+  ): Promise<RenderResult> {
+    const canvas = this.canvas!;
+    const ctx = this.ctx!;
+    const totalFrames = Math.ceil(totalDuration * fps);
+    const frameDurationUs = Math.round(1_000_000 / fps);
+
+    const isHighQuality = exportSettings.quality === "high" || exportSettings.quality === "ultra";
+    const avcCodec = isHighQuality ? "avc1.640032" : "avc1.42001f";
+
+    // --- Load audio buffers using a temporary AudioContext for decoding ---
+    const tempAudioCtx = new AudioContext();
+    const audioBufferMap = new Map<string, AudioBuffer>();
+
+    for (const ac of audioClips) {
+      if (!ac.assetId || audioBufferMap.has(ac.assetId)) continue;
+      const asset = assetMap.get(ac.assetId);
+      if (!asset) continue;
+
+      const audioSrc = this.resolveAssetUrl(ac.assetId, asset.url);
+      try {
+        const response = await fetch(audioSrc);
+        const arrayBuffer = await response.arrayBuffer();
+        const audioBuffer = await tempAudioCtx.decodeAudioData(arrayBuffer);
+        audioBufferMap.set(ac.assetId, audioBuffer);
+      } catch {
+        console.warn(`Не удалось загрузить аудио: ${asset.name}`);
+      }
+    }
+
+    await tempAudioCtx.close();
+
+    // --- Determine if we have audio ---
+    const hasAudio = audioClips.some(ac => ac.assetId && audioBufferMap.has(ac.assetId));
+    const audioSampleRate = 48000;
+    const audioChannels = 2;
+
+    // --- Create Muxer ---
+    const muxer = new Muxer({
+      target: new ArrayBufferTarget(),
+      video: {
+        codec: 'avc',
+        width,
+        height,
+        frameRate: fps,
+      },
+      ...(hasAudio ? {
+        audio: {
+          codec: 'aac',
+          numberOfChannels: audioChannels,
+          sampleRate: audioSampleRate,
+        },
+      } : {}),
+      fastStart: 'in-memory',
+    });
+
+    // --- Video Encoder ---
+    const videoEncoder = new VideoEncoder({
+      output: (chunk, meta) => {
+        muxer.addVideoChunk(chunk, meta);
+      },
+      error: (e) => {
+        console.error("VideoEncoder error:", e);
+      },
+    });
+
+    videoEncoder.configure({
+      codec: avcCodec,
+      width,
+      height,
+      bitrate,
+      framerate: fps,
+    });
+
+    // --- Render video frames synchronously ---
+    report(0.25, "Рендеринг видео (MP4)");
+
+    for (let frame = 0; frame <= totalFrames; frame++) {
+      if (this.cancelled) {
+        videoEncoder.close();
+        throw new Error("Отменено");
+      }
+
+      const currentTime = frame / fps;
+      const progress = 0.25 + (frame / totalFrames) * 0.60;
+      if (frame % Math.max(1, Math.floor(fps / 2)) === 0) {
+        report(progress, "Рендеринг видео (MP4)");
+      }
+
+      // Wait for encoder queue to drain if backpressured
+      if (videoEncoder.encodeQueueSize > 10) {
+        await new Promise<void>(resolve => {
+          const check = () => {
+            if (videoEncoder.encodeQueueSize <= 5) {
+              resolve();
+            } else {
+              setTimeout(check, 1);
+            }
+          };
+          check();
+        });
+      }
+
+      this.renderFrameToCanvas(ctx, canvas, clips, imageCache, currentTime, width, height);
+
+      const videoFrame = new VideoFrame(canvas, {
+        timestamp: frame * frameDurationUs,
+      });
+
+      const keyFrame = frame % (fps * 2) === 0;
+      videoEncoder.encode(videoFrame, { keyFrame });
+      videoFrame.close();
+
+      // Yield to event loop periodically
+      if (frame % 30 === 0) {
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+
+    await videoEncoder.flush();
+    videoEncoder.close();
+
+    // --- Render and encode audio ---
+    if (hasAudio) {
+      report(0.88, "Кодирование аудио (AAC)");
+
+      const offlineCtx = new OfflineAudioContext(
+        audioChannels,
+        Math.ceil(totalDuration * audioSampleRate),
+        audioSampleRate
+      );
+
+      for (const ac of audioClips) {
+        if (!ac.assetId) continue;
+        const buffer = audioBufferMap.get(ac.assetId);
+        if (!buffer) continue;
+
+        const source = offlineCtx.createBufferSource();
+        source.buffer = buffer;
+
+        const gainNode = offlineCtx.createGain();
+        gainNode.gain.value = ac.volume;
+
+        source.connect(gainNode);
+        gainNode.connect(offlineCtx.destination);
+
+        const clipAudioDuration = Math.min(ac.duration, buffer.duration);
+        source.start(ac.startTime, 0, clipAudioDuration);
+      }
+
+      const renderedAudioBuffer = await offlineCtx.startRendering();
+
+      // Encode rendered audio with AudioEncoder
+      const audioEncoder = new AudioEncoder({
+        output: (chunk, meta) => {
+          muxer.addAudioChunk(chunk, meta);
+        },
+        error: (e) => {
+          console.error("AudioEncoder error:", e);
+        },
+      });
+
+      audioEncoder.configure({
+        codec: 'aac',
+        sampleRate: audioSampleRate,
+        numberOfChannels: audioChannels,
+        bitrate: 128_000,
+      });
+
+      // Convert AudioBuffer to interleaved Float32 and feed as AudioData chunks
+      const totalSamples = renderedAudioBuffer.length;
+      const chunkSize = 1024; // frames per audio chunk
+
+      for (let offset = 0; offset < totalSamples; offset += chunkSize) {
+        if (this.cancelled) {
+          audioEncoder.close();
+          throw new Error("Отменено");
+        }
+
+        const framesInChunk = Math.min(chunkSize, totalSamples - offset);
+
+        const audioData = new AudioData({
+          format: 'f32-planar',
+          sampleRate: audioSampleRate,
+          numberOfFrames: framesInChunk,
+          numberOfChannels: audioChannels,
+          timestamp: Math.round((offset / audioSampleRate) * 1_000_000),
+          data: this.createPlanarAudioBuffer(renderedAudioBuffer, offset, framesInChunk, audioChannels),
+        });
+
+        audioEncoder.encode(audioData);
+        audioData.close();
+
+        // Yield periodically
+        if ((offset / chunkSize) % 50 === 0) {
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+      await audioEncoder.flush();
+      audioEncoder.close();
+    }
+
+    report(0.95, "Финализация MP4");
+
+    muxer.finalize();
+
+    const mp4Buffer = muxer.target.buffer;
+    const blob = new Blob([mp4Buffer], { type: "video/mp4" });
+    const url = URL.createObjectURL(blob);
+    const fileName = `video_${Date.now()}.mp4`;
+
+    report(1, "Готово");
+
+    return { blob, url, fileName };
+  }
+
+  private createPlanarAudioBuffer(
+    audioBuffer: AudioBuffer,
+    offset: number,
+    frameCount: number,
+    channels: number,
+  ): Float32Array {
+    const planar = new Float32Array(frameCount * channels);
+    for (let ch = 0; ch < channels; ch++) {
+      const channelData = ch < audioBuffer.numberOfChannels
+        ? audioBuffer.getChannelData(ch)
+        : audioBuffer.getChannelData(0);
+      const destOffset = ch * frameCount;
+      for (let i = 0; i < frameCount; i++) {
+        planar[destOffset + i] = channelData[offset + i];
+      }
+    }
+    return planar;
+  }
+
+  private renderFrameToCanvas(
+    ctx: CanvasRenderingContext2D,
+    _canvas: HTMLCanvasElement,
+    clips: ClipInfo[],
+    imageCache: Map<string, HTMLImageElement>,
+    currentTime: number,
+    width: number,
+    height: number,
+  ): void {
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, width, height);
+
+    for (const clip of clips) {
+      if (currentTime < clip.startTime || currentTime >= clip.startTime + clip.duration) continue;
+
+      const elapsed = currentTime - clip.startTime;
+      const remaining = clip.duration - elapsed;
+      let fadeAlpha = clip.opacity;
+
+      if (clip.duration > 0.2 && (clip.type === "image" || clip.type === "video")) {
+        const fadeDur = Math.min(FADE_DURATION, clip.duration / 3);
+        if (elapsed < fadeDur) {
+          fadeAlpha = clip.opacity * (elapsed / fadeDur);
+        } else if (remaining < fadeDur) {
+          fadeAlpha = clip.opacity * (remaining / fadeDur);
+        }
+      }
+
+      if (clip.transition && clip.transition.duration > 0 && elapsed < clip.transition.duration) {
+        const tProg = elapsed / clip.transition.duration;
+        fadeAlpha = this.applyTransitionAlpha(clip.transition.type, tProg, fadeAlpha);
+      }
+
+      if ((clip.type === "image" || clip.type === "video") && clip.assetId) {
+        const img = imageCache.get(clip.assetId);
+        if (img) {
+          ctx.save();
+          ctx.globalAlpha = fadeAlpha;
+          this.applyCanvasFilters(clip.filters, width, height);
+          this.applyTransitionTransform(clip.transition, elapsed, width, height);
+          this.drawImageWithTransform(img, width, height, clip);
+          ctx.restore();
+        }
+      }
+
+      if (clip.type === "text") {
+        ctx.save();
+        ctx.globalAlpha = clip.opacity;
+        const fontSize = Math.round((clip.fontSize || 48) * (height / 1080));
+        const weight = clip.fontWeight || 600;
+        const family = clip.fontFamily ? `"${clip.fontFamily}", sans-serif` : "sans-serif";
+        ctx.font = `${weight} ${fontSize}px ${family}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const textContent = clip.text || clip.name;
+        const cx = width / 2;
+        const cy = height / 2;
+
+        if (clip.textBg) {
+          const metrics = ctx.measureText(textContent);
+          const tw = metrics.width + fontSize * 0.6;
+          const th = fontSize * 1.4;
+          ctx.save();
+          ctx.globalAlpha = clip.textBgOpacity ?? 0.6;
+          ctx.fillStyle = clip.textBgColor || "#000000";
+          ctx.beginPath();
+          ctx.roundRect(cx - tw / 2, cy - th / 2, tw, th, fontSize * 0.15);
+          ctx.fill();
+          ctx.restore();
+          ctx.globalAlpha = clip.opacity;
+        }
+
+        const shadowBlur = clip.textShadow ?? 8;
+        if (shadowBlur > 0) {
+          ctx.shadowColor = "rgba(0,0,0,0.7)";
+          ctx.shadowBlur = shadowBlur;
+        }
+
+        const stroke = clip.textStroke ?? 0;
+        if (stroke > 0) {
+          ctx.strokeStyle = clip.textStrokeColor || "#000000";
+          ctx.lineWidth = stroke * 2;
+          ctx.lineJoin = "round";
+          ctx.strokeText(textContent, cx, cy);
+          ctx.shadowBlur = 0;
+        }
+
+        ctx.fillStyle = clip.fontColor || "#ffffff";
+        ctx.fillText(textContent, cx, cy);
+        ctx.restore();
+      }
+    }
+  }
+
+  private async renderWebm(
+    clips: ClipInfo[],
+    audioClips: ClipInfo[],
+    assetMap: Map<string, MediaAsset>,
+    imageCache: Map<string, HTMLImageElement>,
+    width: number,
+    height: number,
+    fps: number,
+    totalDuration: number,
+    bitrate: number,
+    exportSettings: ExportSettings,
+    report: (progress: number, stage: string) => void
+  ): Promise<RenderResult> {
+    const canvas = this.canvas!;
+    const ctx = this.ctx!;
+
+    const mimeType = "video/webm;codecs=vp9,opus";
     const supportedMime = MediaRecorder.isTypeSupported(mimeType)
       ? mimeType
       : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
@@ -153,12 +542,6 @@ export class VideoRenderer {
 
     const audioCtx = new AudioContext();
     const destination = audioCtx.createMediaStreamDestination();
-
-    const audioClips = clips.filter(c => {
-      if (c.trackMuted) return false;
-      const asset = c.assetId ? assetMap.get(c.assetId) : null;
-      return asset?.type === "audio";
-    });
 
     const audioBufferMap = new Map<string, AudioBuffer>();
 
@@ -180,14 +563,12 @@ export class VideoRenderer {
     }
 
     const scheduledSources: AudioBufferSourceNode[] = [];
-    const scheduledGains: GainNode[] = [];
 
-    const stream = this.canvas.captureStream(fps);
+    const stream = canvas.captureStream(fps);
     for (const audioTrack of destination.stream.getAudioTracks()) {
       stream.addTrack(audioTrack);
     }
 
-    const bitrate = exportSettings.bitrate > 0 ? exportSettings.bitrate * 1000 : quality.bitrate;
     const recorder = new MediaRecorder(stream, {
       mimeType: supportedMime,
       videoBitsPerSecond: bitrate,
@@ -220,7 +601,6 @@ export class VideoRenderer {
       source.start(audioCtxStartTime + ac.startTime, 0, clipAudioDuration);
 
       scheduledSources.push(source);
-      scheduledGains.push(gainNode);
     }
 
     report(0.25, "Рендеринг видео");
@@ -243,89 +623,7 @@ export class VideoRenderer {
         report(progress, "Рендеринг видео");
       }
 
-      this.ctx.fillStyle = "#000000";
-      this.ctx.fillRect(0, 0, width, height);
-
-      for (const clip of clips) {
-        if (currentTime < clip.startTime || currentTime >= clip.startTime + clip.duration) continue;
-
-        const elapsed = currentTime - clip.startTime;
-        const remaining = clip.duration - elapsed;
-        let fadeAlpha = clip.opacity;
-
-        if (clip.duration > 0.2 && (clip.type === "image" || clip.type === "video")) {
-          const fadeDur = Math.min(FADE_DURATION, clip.duration / 3);
-          if (elapsed < fadeDur) {
-            fadeAlpha = clip.opacity * (elapsed / fadeDur);
-          } else if (remaining < fadeDur) {
-            fadeAlpha = clip.opacity * (remaining / fadeDur);
-          }
-        }
-
-        if (clip.transition && clip.transition.duration > 0 && elapsed < clip.transition.duration) {
-          const tProg = elapsed / clip.transition.duration;
-          fadeAlpha = this.applyTransitionAlpha(clip.transition.type, tProg, fadeAlpha);
-        }
-
-        if ((clip.type === "image" || clip.type === "video") && clip.assetId) {
-          const img = imageCache.get(clip.assetId);
-          if (img) {
-            this.ctx.save();
-            this.ctx.globalAlpha = fadeAlpha;
-            this.applyCanvasFilters(clip.filters, width, height);
-            this.applyTransitionTransform(clip.transition, elapsed, width, height);
-            this.drawImageWithTransform(img, width, height, clip);
-            this.ctx.restore();
-          }
-        }
-
-        if (clip.type === "text") {
-          this.ctx.save();
-          this.ctx.globalAlpha = clip.opacity;
-          const fontSize = Math.round((clip.fontSize || 48) * (height / 1080));
-          const weight = clip.fontWeight || 600;
-          const family = clip.fontFamily ? `"${clip.fontFamily}", sans-serif` : "sans-serif";
-          this.ctx.font = `${weight} ${fontSize}px ${family}`;
-          this.ctx.textAlign = "center";
-          this.ctx.textBaseline = "middle";
-          const textContent = clip.text || clip.name;
-          const cx = width / 2;
-          const cy = height / 2;
-
-          if (clip.textBg) {
-            const metrics = this.ctx.measureText(textContent);
-            const tw = metrics.width + fontSize * 0.6;
-            const th = fontSize * 1.4;
-            this.ctx.save();
-            this.ctx.globalAlpha = clip.textBgOpacity ?? 0.6;
-            this.ctx.fillStyle = clip.textBgColor || "#000000";
-            this.ctx.beginPath();
-            this.ctx.roundRect(cx - tw / 2, cy - th / 2, tw, th, fontSize * 0.15);
-            this.ctx.fill();
-            this.ctx.restore();
-            this.ctx.globalAlpha = clip.opacity;
-          }
-
-          const shadowBlur = clip.textShadow ?? 8;
-          if (shadowBlur > 0) {
-            this.ctx.shadowColor = "rgba(0,0,0,0.7)";
-            this.ctx.shadowBlur = shadowBlur;
-          }
-
-          const stroke = clip.textStroke ?? 0;
-          if (stroke > 0) {
-            this.ctx.strokeStyle = clip.textStrokeColor || "#000000";
-            this.ctx.lineWidth = stroke * 2;
-            this.ctx.lineJoin = "round";
-            this.ctx.strokeText(textContent, cx, cy);
-            this.ctx.shadowBlur = 0;
-          }
-
-          this.ctx.fillStyle = clip.fontColor || "#ffffff";
-          this.ctx.fillText(textContent, cx, cy);
-          this.ctx.restore();
-        }
-      }
+      this.renderFrameToCanvas(ctx, canvas, clips, imageCache, currentTime, width, height);
 
       const targetTime = renderStartTime + frame * frameDurationMs;
       const now = performance.now();

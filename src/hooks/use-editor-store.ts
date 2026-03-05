@@ -62,7 +62,7 @@ const useEditorStore = create<EditorStore>((set, get) => ({
   zoom: 1,
   snapEnabled: true,
   activePanel: 'media',
-  exportSettings: { format: 'webm', quality: 'high', resolution: '1920x1080', fps: 30, codec: 'VP9', bitrate: 8000 },
+  exportSettings: { format: 'mp4', quality: 'high', resolution: '1920x1080', fps: 30, codec: 'H.264', bitrate: 8000 },
   draggingAsset: null,
   previewFilter: null,
 

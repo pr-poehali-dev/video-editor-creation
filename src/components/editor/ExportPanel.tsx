@@ -189,11 +189,22 @@ const ExportPanel = () => {
 
               <Separator className="bg-border/50" />
 
-              <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-secondary/30">
-                <Icon name="FileVideo" size={14} className="text-primary" />
-                <div>
-                  <div className="text-xs font-medium">Формат: WebM (VP9)</div>
-                  <div className="text-[9px] text-muted-foreground">Видео с аудио, совместим со всеми браузерами</div>
+              <div>
+                <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Формат</Label>
+                <div className="grid grid-cols-2 gap-1 mt-1">
+                  {([
+                    { value: 'mp4' as const, label: 'MP4 (H.264)', desc: 'Для ТВ, телефонов, соцсетей' },
+                    { value: 'webm' as const, label: 'WebM (VP9)', desc: 'Для браузеров, легче' },
+                  ]).map(f => (
+                    <button
+                      key={f.value}
+                      onClick={() => setExportSettings({ format: f.value, codec: f.value === 'mp4' ? 'H.264' : 'VP9' })}
+                      className={`p-2 rounded text-left transition-colors ${exportSettings.format === f.value ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 hover:bg-secondary'}`}
+                    >
+                      <div className="text-xs font-medium">{f.label}</div>
+                      <div className={`text-[9px] ${exportSettings.format === f.value ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{f.desc}</div>
+                    </button>
+                  ))}
                 </div>
               </div>
 
