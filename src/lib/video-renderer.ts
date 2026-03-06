@@ -47,6 +47,7 @@ interface ClipInfo {
   type: string;
   startTime: number;
   duration: number;
+  offset: number;
   opacity: number;
   volume: number;
   name: string;
@@ -155,6 +156,12 @@ export class VideoRenderer {
       const asset = c.assetId ? assetMap.get(c.assetId) : null;
       return asset?.type === "audio" || asset?.type === "video";
     });
+
+    console.log(`[Render] Total clips: ${clips.length}, audio clips: ${audioClips.length}`);
+    for (const ac of audioClips) {
+      const asset = ac.assetId ? assetMap.get(ac.assetId) : null;
+      console.log(`[Render] Audio clip: "${ac.name}", assetId=${ac.assetId}, type=${asset?.type}, url=${asset?.url?.substring(0, 60)}, vol=${ac.volume}, muted=${ac.trackMuted}, offset=${ac.offset}`);
+    }
 
     const bitrate = exportSettings.bitrate > 0 ? exportSettings.bitrate * 1000 : quality.bitrate;
 
@@ -305,13 +312,16 @@ export class VideoRenderer {
 
       const audioSrc = this.resolveAssetUrl(ac.assetId, asset.url);
       try {
-        const response = await fetch(audioSrc, { mode: 'cors' });
+        const fetchOpts: RequestInit = audioSrc.startsWith('blob:') ? {} : { mode: 'cors' };
+        const response = await fetch(audioSrc, fetchOpts);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength === 0) throw new Error('Empty audio data');
         const audioBuffer = await tempAudioCtx.decodeAudioData(arrayBuffer);
         audioBufferMap.set(ac.assetId, audioBuffer);
+        console.log(`[Render] Audio loaded: ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, channels=${audioBuffer.numberOfChannels}`);
       } catch (err) {
-        console.warn(`Не удалось загрузить аудио: ${asset.name}`, err);
+        console.warn(`[Render] Не удалось загрузить аудио: ${asset.name}, url=${audioSrc}`, err);
       }
     }
 
@@ -321,23 +331,9 @@ export class VideoRenderer {
     const audioSampleRate = 48000;
     const audioChannels = 2;
 
-    if (hasAudio && typeof AudioEncoder !== 'undefined') {
-      try {
-        const support = await AudioEncoder.isConfigSupported({
-          codec: 'mp4a.40.2',
-          sampleRate: audioSampleRate,
-          numberOfChannels: audioChannels,
-          bitrate: 128_000,
-        });
-        if (!support.supported) {
-          console.warn("AAC not supported — switching to WebM for audio support");
-          return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
-        }
-      } catch {
-        console.warn("AudioEncoder check failed — switching to WebM");
-        return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
-      }
-    } else if (hasAudio && typeof AudioEncoder === 'undefined') {
+    console.log(`[Render] hasAudio=${hasAudio}, audioBuffers=${audioBufferMap.size}, AudioEncoder=${typeof AudioEncoder !== 'undefined'}`);
+
+    if (hasAudio && typeof AudioEncoder === 'undefined') {
       console.warn("AudioEncoder API not available — switching to WebM for audio support");
       return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
     }
@@ -435,9 +431,28 @@ export class VideoRenderer {
     await videoEncoder.flush();
     videoEncoder.close();
 
-    // --- Render and encode audio ---
     if (hasAudio) {
       report(0.88, "Кодирование аудио (AAC)");
+
+      let audioEncoderSupported = typeof AudioEncoder !== 'undefined';
+      if (audioEncoderSupported) {
+        try {
+          const support = await AudioEncoder.isConfigSupported({
+            codec: 'mp4a.40.2',
+            sampleRate: audioSampleRate,
+            numberOfChannels: audioChannels,
+            bitrate: 128_000,
+          });
+          if (!support.supported) audioEncoderSupported = false;
+        } catch {
+          audioEncoderSupported = false;
+        }
+      }
+
+      if (!audioEncoderSupported) {
+        console.warn("AAC not supported — switching to WebM with audio");
+        return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+      }
 
       const offlineCtx = new OfflineAudioContext(
         audioChannels,
@@ -459,8 +474,12 @@ export class VideoRenderer {
         source.connect(gainNode);
         gainNode.connect(offlineCtx.destination);
 
-        const clipAudioDuration = Math.min(ac.duration, buffer.duration);
-        source.start(ac.startTime, 0, clipAudioDuration);
+        const audioOffset = ac.offset || 0;
+        const maxDuration = buffer.duration - audioOffset;
+        const clipAudioDuration = Math.min(ac.duration, maxDuration);
+        if (clipAudioDuration > 0) {
+          source.start(ac.startTime, audioOffset, clipAudioDuration);
+        }
       }
 
       const renderedAudioBuffer = await offlineCtx.startRendering();
@@ -676,6 +695,9 @@ export class VideoRenderer {
           : "video/webm";
 
     const audioCtx = new AudioContext();
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
     const destination = audioCtx.createMediaStreamDestination();
 
     const audioBufferMap = new Map<string, AudioBuffer>();
@@ -688,13 +710,16 @@ export class VideoRenderer {
       const audioSrc = this.resolveAssetUrl(ac.assetId, asset.url);
 
       try {
-        const response = await fetch(audioSrc, { mode: 'cors' });
+        const fetchOpts: RequestInit = audioSrc.startsWith('blob:') ? {} : { mode: 'cors' };
+        const response = await fetch(audioSrc, fetchOpts);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength === 0) throw new Error('Empty audio data');
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
         audioBufferMap.set(ac.assetId, audioBuffer);
+        console.log(`[Render/WebM] Audio loaded: ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s`);
       } catch (err) {
-        console.warn(`Не удалось загрузить аудио: ${asset.name}`, err);
+        console.warn(`[Render/WebM] Не удалось загрузить аудио: ${asset.name}, url=${audioSrc}`, err);
       }
     }
 
@@ -733,8 +758,12 @@ export class VideoRenderer {
       source.connect(gainNode);
       gainNode.connect(destination);
 
-      const clipAudioDuration = Math.min(ac.duration, buffer.duration);
-      source.start(audioCtxStartTime + ac.startTime, 0, clipAudioDuration);
+      const audioOffset = ac.offset || 0;
+      const maxDuration = buffer.duration - audioOffset;
+      const clipAudioDuration = Math.min(ac.duration, maxDuration);
+      if (clipAudioDuration > 0) {
+        source.start(audioCtxStartTime + ac.startTime, audioOffset, clipAudioDuration);
+      }
 
       scheduledSources.push(source);
     }
@@ -832,6 +861,7 @@ export class VideoRenderer {
           type: clip.type || track.type,
           startTime: clip.startTime,
           duration: clip.duration,
+          offset: clip.offset ?? 0,
           opacity: clip.opacity ?? 1,
           volume: clip.volume ?? 1,
           name: clip.name,
@@ -861,14 +891,14 @@ export class VideoRenderer {
   }
 
   private resolveAssetUrl(assetId: string, originalUrl: string): string {
-    if (originalUrl && (originalUrl.startsWith("https://") || originalUrl.startsWith("http://"))) {
-      return originalUrl;
-    }
     if (assetId.startsWith("server_")) {
       const serverId = parseInt(assetId.replace("server_", ""), 10);
       if (!isNaN(serverId)) {
         return mediaApi.proxyUrl(serverId);
       }
+    }
+    if (originalUrl && (originalUrl.startsWith("https://") || originalUrl.startsWith("http://") || originalUrl.startsWith("blob:"))) {
+      return originalUrl;
     }
     return originalUrl;
   }
