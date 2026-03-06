@@ -130,8 +130,12 @@ const ExportPanel = () => {
         }
       );
 
+      const ext = result.fileName.split('.').pop() || exportSettings.format;
+      const safeName = (project.name || 'video').replace(/[^\w\sа-яёА-ЯЁ-]/gi, '').trim().replace(/\s+/g, '_') || 'video';
+      const projectFileName = `${safeName}.${ext}`;
+
       setResultUrl(result.url);
-      setResultFileName(result.fileName);
+      setResultFileName(projectFileName);
       setResultSize(result.blob.size);
       setExportDone(true);
       renderer.terminate();
