@@ -325,18 +325,9 @@ export class VideoRenderer {
       const asset = assetMap.get(ac.assetId);
       if (!asset) continue;
 
-      const audioSrc = this.resolveAssetUrl(ac.assetId, asset.url);
-      try {
-        const fetchOpts: RequestInit = audioSrc.startsWith('blob:') ? {} : { mode: 'cors' };
-        const response = await fetch(audioSrc, fetchOpts);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const arrayBuffer = await response.arrayBuffer();
-        if (arrayBuffer.byteLength === 0) throw new Error('Empty audio data');
-        const audioBuffer = await tempAudioCtx.decodeAudioData(arrayBuffer);
+      const audioBuffer = await this.fetchAudioBuffer(tempAudioCtx, ac.assetId, asset, 'Render');
+      if (audioBuffer) {
         audioBufferMap.set(ac.assetId, audioBuffer);
-        console.log(`[Render] Audio loaded: ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, channels=${audioBuffer.numberOfChannels}`);
-      } catch (err) {
-        console.warn(`[Render] Не удалось загрузить аудио: ${asset.name}, url=${audioSrc}`, err);
       }
     }
 
@@ -745,19 +736,9 @@ export class VideoRenderer {
       const asset = assetMap.get(ac.assetId);
       if (!asset) continue;
 
-      const audioSrc = this.resolveAssetUrl(ac.assetId, asset.url);
-
-      try {
-        const fetchOpts: RequestInit = audioSrc.startsWith('blob:') ? {} : { mode: 'cors' };
-        const response = await fetch(audioSrc, fetchOpts);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const arrayBuffer = await response.arrayBuffer();
-        if (arrayBuffer.byteLength === 0) throw new Error('Empty audio data');
-        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      const audioBuffer = await this.fetchAudioBuffer(audioCtx, ac.assetId, asset, 'Render/WebM');
+      if (audioBuffer) {
         audioBufferMap.set(ac.assetId, audioBuffer);
-        console.log(`[Render/WebM] Audio loaded: ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s`);
-      } catch (err) {
-        console.warn(`[Render/WebM] Не удалось загрузить аудио: ${asset.name}, url=${audioSrc}`, err);
       }
     }
 
@@ -926,6 +907,42 @@ export class VideoRenderer {
       }
     }
     return result.sort((a, b) => a.startTime - b.startTime);
+  }
+
+  private getUrlsToTry(assetId: string, originalUrl: string): string[] {
+    const cdnUrl = originalUrl;
+    const proxyUrl = this.resolveAssetUrl(assetId, originalUrl);
+    const urls: string[] = [];
+    if (cdnUrl && cdnUrl.startsWith('http') && cdnUrl !== proxyUrl) {
+      urls.push(cdnUrl);
+    }
+    urls.push(proxyUrl);
+    return urls;
+  }
+
+  private async fetchAudioBuffer(
+    audioCtx: AudioContext,
+    assetId: string,
+    asset: { url: string; name: string },
+    label = 'Render'
+  ): Promise<AudioBuffer | null> {
+    const urlsToTry = this.getUrlsToTry(assetId, asset.url);
+    for (const url of urlsToTry) {
+      try {
+        const fetchOpts: RequestInit = url.startsWith('blob:') ? {} : { mode: 'cors' };
+        const response = await fetch(url, fetchOpts);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength === 0) throw new Error('Empty audio data');
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        console.log(`[${label}] Audio loaded: ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, channels=${audioBuffer.numberOfChannels}, url=${url.substring(0, 60)}`);
+        return audioBuffer;
+      } catch (err) {
+        console.warn(`[${label}] Audio load attempt failed: ${asset.name}, url=${url.substring(0, 60)}`, err);
+      }
+    }
+    console.error(`[${label}] Не удалось загрузить аудио ни по одному URL: ${asset.name}`);
+    return null;
   }
 
   private resolveAssetUrl(assetId: string, originalUrl: string): string {
