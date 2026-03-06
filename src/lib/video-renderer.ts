@@ -136,14 +136,29 @@ export class VideoRenderer {
 
       report(loadedCount / Math.max(assetsToLoad.size, 1) * 0.2, `Загрузка ${asset.name}`);
 
-      const resolvedUrl = this.resolveAssetUrl(assetId, asset.url);
+      const cdnUrl = asset.url;
+      const proxyUrl = this.resolveAssetUrl(assetId, asset.url);
+      const urlsToTry: string[] = [];
+      if (cdnUrl && cdnUrl.startsWith('http') && cdnUrl !== proxyUrl) {
+        urlsToTry.push(cdnUrl);
+      }
+      urlsToTry.push(proxyUrl);
 
-      if (asset.type === "image") {
-        const img = await this.loadImage(resolvedUrl);
-        imageCache.set(assetId, img);
-      } else if (asset.type === "video") {
-        const img = await this.loadImage(resolvedUrl).catch(() => null);
-        if (img) imageCache.set(assetId, img);
+      if (asset.type === "image" || asset.type === "video") {
+        let loaded = false;
+        for (const url of urlsToTry) {
+          try {
+            const img = await this.loadImage(url);
+            imageCache.set(assetId, img);
+            loaded = true;
+            break;
+          } catch {
+            console.warn(`[Render] Image load failed: ${asset.name}, url=${url.substring(0, 80)}`);
+          }
+        }
+        if (!loaded) {
+          console.error(`[Render] Не удалось загрузить: ${asset.name}`);
+        }
       }
 
       loadedCount++;
@@ -484,11 +499,27 @@ export class VideoRenderer {
 
       const renderedAudioBuffer = await offlineCtx.startRendering();
 
+      let maxAmplitude = 0;
+      for (let ch = 0; ch < renderedAudioBuffer.numberOfChannels; ch++) {
+        const data = renderedAudioBuffer.getChannelData(ch);
+        for (let i = 0; i < data.length; i += 1000) {
+          const abs = Math.abs(data[i]);
+          if (abs > maxAmplitude) maxAmplitude = abs;
+        }
+      }
+      console.log(`[Render] Audio rendered: samples=${renderedAudioBuffer.length}, duration=${renderedAudioBuffer.duration.toFixed(2)}s, channels=${renderedAudioBuffer.numberOfChannels}, maxAmplitude=${maxAmplitude.toFixed(4)}`);
+
+      if (maxAmplitude < 0.0001) {
+        console.warn("[Render] Audio buffer is silent! Check clip timing and offsets.");
+      }
+
       let audioEncoderFailed = false;
+      let audioChunksAdded = 0;
 
       const audioEncoder = new AudioEncoder({
         output: (chunk, meta) => {
           muxer.addAudioChunk(chunk, meta);
+          audioChunksAdded++;
         },
         error: (e) => {
           console.error("AudioEncoder error:", e);
@@ -532,13 +563,20 @@ export class VideoRenderer {
         }
       }
 
-      if (!audioEncoderFailed) {
+      try {
         await audioEncoder.flush();
+      } catch (flushErr) {
+        console.error("[Render] AudioEncoder flush error:", flushErr);
+        audioEncoderFailed = true;
       }
       audioEncoder.close();
 
+      console.log(`[Render] Audio encoding done: chunks=${audioChunksAdded}, failed=${audioEncoderFailed}`);
       if (audioEncoderFailed) {
-        console.warn("Audio encoding failed mid-process — video will have no audio");
+        console.warn("[Render] Audio encoding failed — video may have no audio");
+      }
+      if (audioChunksAdded === 0) {
+        console.error("[Render] No audio chunks were added to muxer!");
       }
     }
 
