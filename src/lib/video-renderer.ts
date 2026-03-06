@@ -314,12 +314,24 @@ export class VideoRenderer {
     const tempAudioCtx = new AudioContext();
     const audioBufferMap = new Map<string, AudioBuffer>();
 
-    for (const ac of audioClips) {
+    const uniqueAudioAssets = audioClips.filter(ac => ac.assetId && !audioBufferMap.has(ac.assetId) && assetMap.has(ac.assetId));
+    const totalAudioAssets = uniqueAudioAssets.length;
+
+    for (let i = 0; i < uniqueAudioAssets.length; i++) {
+      const ac = uniqueAudioAssets[i];
       if (!ac.assetId || audioBufferMap.has(ac.assetId)) continue;
       const asset = assetMap.get(ac.assetId);
       if (!asset) continue;
 
-      const audioBuffer = await this.fetchAudioBuffer(tempAudioCtx, ac.assetId, asset, 'Render');
+      const audioProgress = (p: number) => {
+        const base = 0.22;
+        const range = 0.08;
+        const perAsset = range / Math.max(totalAudioAssets, 1);
+        report(base + perAsset * i + perAsset * p, `Загрузка аудио: ${asset.name}`);
+      };
+      audioProgress(0);
+
+      const audioBuffer = await this.fetchAudioBuffer(tempAudioCtx, ac.assetId, asset, 'Render', audioProgress);
       if (audioBuffer) {
         audioBufferMap.set(ac.assetId, audioBuffer);
       }
@@ -938,15 +950,18 @@ export class VideoRenderer {
     audioCtx: AudioContext,
     assetId: string,
     asset: { url: string; name: string },
-    label = 'Render'
+    label = 'Render',
+    onProgress?: (p: number) => void
   ): Promise<AudioBuffer | null> {
     if (assetId.startsWith("server_")) {
       const serverId = parseInt(assetId.replace("server_", ""), 10);
       if (!isNaN(serverId)) {
         try {
-          const arrayBuffer = await this.fetchViaChunkedProxy(serverId, label);
+          const arrayBuffer = await this.fetchViaChunkedProxy(serverId, label, onProgress);
           if (arrayBuffer.byteLength === 0) throw new Error('Empty audio data');
+          onProgress?.(0.9);
           const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+          onProgress?.(1);
           console.log(`[${label}] Audio loaded (chunked): ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, channels=${audioBuffer.numberOfChannels}`);
           return audioBuffer;
         } catch (err) {
@@ -957,10 +972,14 @@ export class VideoRenderer {
     const urlsToTry = this.getUrlsToTry(assetId, asset.url);
     for (const url of urlsToTry) {
       try {
+        onProgress?.(0.1);
         const response = await this.fetchWithRetry(url);
+        onProgress?.(0.7);
         const arrayBuffer = await response.arrayBuffer();
         if (arrayBuffer.byteLength === 0) throw new Error('Empty audio data');
+        onProgress?.(0.9);
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        onProgress?.(1);
         console.log(`[${label}] Audio loaded: ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, channels=${audioBuffer.numberOfChannels}, url=${url.substring(0, 60)}`);
         return audioBuffer;
       } catch (err) {
@@ -971,7 +990,7 @@ export class VideoRenderer {
     return null;
   }
 
-  private async fetchViaChunkedProxy(serverId: number, label: string): Promise<ArrayBuffer> {
+  private async fetchViaChunkedProxy(serverId: number, label: string, onProgress?: (p: number) => void): Promise<ArrayBuffer> {
     const CHUNK_LIMIT = 3 * 1024 * 1024;
     const infoUrl = mediaApi.proxyInfoUrl(serverId);
     const infoResp = await this.fetchWithRetry(infoUrl);
@@ -980,8 +999,10 @@ export class VideoRenderer {
     console.log(`[${label}] File size: ${(totalSize / 1024 / 1024).toFixed(1)}MB, will use ${totalSize <= CHUNK_LIMIT ? 'direct' : 'chunked'} download`);
 
     if (totalSize <= CHUNK_LIMIT) {
+      onProgress?.(0.3);
       const directUrl = mediaApi.proxyUrl(serverId);
       const resp = await this.fetchWithRetry(directUrl);
+      onProgress?.(0.8);
       return resp.arrayBuffer();
     }
 
@@ -995,6 +1016,7 @@ export class VideoRenderer {
       const buf = await resp.arrayBuffer();
       chunks.push(new Uint8Array(buf));
       downloaded = end + 1;
+      onProgress?.(0.85 * (downloaded / totalSize));
       console.log(`[${label}] Downloaded chunk: ${(downloaded / 1024 / 1024).toFixed(1)}/${(totalSize / 1024 / 1024).toFixed(1)}MB`);
     }
 
