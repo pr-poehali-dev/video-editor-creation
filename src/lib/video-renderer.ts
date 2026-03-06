@@ -153,7 +153,7 @@ export class VideoRenderer {
     const audioClips = clips.filter(c => {
       if (c.trackMuted) return false;
       const asset = c.assetId ? assetMap.get(c.assetId) : null;
-      return asset?.type === "audio";
+      return asset?.type === "audio" || asset?.type === "video";
     });
 
     const bitrate = exportSettings.bitrate > 0 ? exportSettings.bitrate * 1000 : quality.bitrate;
