@@ -354,6 +354,7 @@ export class VideoRenderer {
         },
       } : {}),
       fastStart: 'in-memory',
+      firstTimestampBehavior: 'offset',
     });
 
     let videoEncoderFailed = false;
@@ -503,6 +504,9 @@ export class VideoRenderer {
 
       const audioEncoder = new AudioEncoder({
         output: (chunk, meta) => {
+          if (audioChunksAdded === 0) {
+            console.log(`[Render] First audio chunk: ts=${chunk.timestamp}, dur=${chunk.duration}, size=${chunk.byteLength}, hasMeta=${!!meta}, hasDecoderConfig=${!!meta?.decoderConfig}`);
+          }
           muxer.addAudioChunk(chunk, meta);
           audioChunksAdded++;
         },
@@ -570,6 +574,7 @@ export class VideoRenderer {
     muxer.finalize();
 
     const mp4Buffer = muxer.target.buffer;
+    console.log(`[Render] MP4 finalized: size=${mp4Buffer.byteLength} bytes, hasAudio=${hasAudio}`);
     const blob = new Blob([mp4Buffer], { type: "video/mp4" });
     const url = URL.createObjectURL(blob);
     const fileName = `video_${Date.now()}.mp4`;
