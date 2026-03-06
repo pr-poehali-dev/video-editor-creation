@@ -118,6 +118,14 @@ export const media = {
     const token = getToken();
     return `${urls.media}?route=${encodeURIComponent('/proxy')}&id=${id}&token=${token}`;
   },
+  proxyInfoUrl: (id: number) => {
+    const token = getToken();
+    return `${urls.media}?route=${encodeURIComponent('/proxy')}&id=${id}&token=${token}&info=1`;
+  },
+  proxyRangeUrl: (id: number, start: number, end: number) => {
+    const token = getToken();
+    return `${urls.media}?route=${encodeURIComponent('/proxy')}&id=${id}&token=${token}&start=${start}&end=${end}`;
+  },
 };
 
 export default { auth, wallet, projects, admin, shop, media };

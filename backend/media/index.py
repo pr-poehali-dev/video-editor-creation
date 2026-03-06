@@ -372,7 +372,19 @@ def handle_proxy(conn, user, qs):
 
     s3_key, mime_type = row
     s3 = get_s3()
-    obj = s3.get_object(Bucket='files', Key=s3_key)
+
+    if qs.get('info') == '1':
+        head = s3.head_object(Bucket='files', Key=s3_key)
+        return ok({'size': head['ContentLength'], 'mime_type': mime_type})
+
+    range_start = qs.get('start')
+    range_end = qs.get('end')
+
+    s3_params = {'Bucket': 'files', 'Key': s3_key}
+    if range_start is not None and range_end is not None:
+        s3_params['Range'] = f'bytes={int(range_start)}-{int(range_end)}'
+
+    obj = s3.get_object(**s3_params)
     data = obj['Body'].read()
     b64_data = base64.b64encode(data).decode('utf-8')
 

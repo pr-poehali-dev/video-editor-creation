@@ -940,6 +940,20 @@ export class VideoRenderer {
     asset: { url: string; name: string },
     label = 'Render'
   ): Promise<AudioBuffer | null> {
+    if (assetId.startsWith("server_")) {
+      const serverId = parseInt(assetId.replace("server_", ""), 10);
+      if (!isNaN(serverId)) {
+        try {
+          const arrayBuffer = await this.fetchViaChunkedProxy(serverId, label);
+          if (arrayBuffer.byteLength === 0) throw new Error('Empty audio data');
+          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+          console.log(`[${label}] Audio loaded (chunked): ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, channels=${audioBuffer.numberOfChannels}`);
+          return audioBuffer;
+        } catch (err) {
+          console.warn(`[${label}] Chunked proxy failed: ${asset.name}`, err);
+        }
+      }
+    }
     const urlsToTry = this.getUrlsToTry(assetId, asset.url);
     for (const url of urlsToTry) {
       try {
@@ -955,6 +969,42 @@ export class VideoRenderer {
     }
     console.error(`[${label}] Не удалось загрузить аудио ни по одному URL: ${asset.name}`);
     return null;
+  }
+
+  private async fetchViaChunkedProxy(serverId: number, label: string): Promise<ArrayBuffer> {
+    const CHUNK_LIMIT = 3 * 1024 * 1024;
+    const infoUrl = mediaApi.proxyInfoUrl(serverId);
+    const infoResp = await this.fetchWithRetry(infoUrl);
+    const info = await infoResp.json();
+    const totalSize = info.size as number;
+    console.log(`[${label}] File size: ${(totalSize / 1024 / 1024).toFixed(1)}MB, will use ${totalSize <= CHUNK_LIMIT ? 'direct' : 'chunked'} download`);
+
+    if (totalSize <= CHUNK_LIMIT) {
+      const directUrl = mediaApi.proxyUrl(serverId);
+      const resp = await this.fetchWithRetry(directUrl);
+      return resp.arrayBuffer();
+    }
+
+    const chunks: Uint8Array[] = [];
+    let downloaded = 0;
+    while (downloaded < totalSize) {
+      if (this.cancelled) throw new Error("Отменено");
+      const end = Math.min(downloaded + CHUNK_LIMIT - 1, totalSize - 1);
+      const rangeUrl = mediaApi.proxyRangeUrl(serverId, downloaded, end);
+      const resp = await this.fetchWithRetry(rangeUrl);
+      const buf = await resp.arrayBuffer();
+      chunks.push(new Uint8Array(buf));
+      downloaded = end + 1;
+      console.log(`[${label}] Downloaded chunk: ${(downloaded / 1024 / 1024).toFixed(1)}/${(totalSize / 1024 / 1024).toFixed(1)}MB`);
+    }
+
+    const result = new Uint8Array(totalSize);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+    return result.buffer;
   }
 
   private resolveAssetUrl(assetId: string, originalUrl: string): string {
