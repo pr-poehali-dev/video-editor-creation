@@ -136,13 +136,7 @@ export class VideoRenderer {
 
       report(loadedCount / Math.max(assetsToLoad.size, 1) * 0.2, `Загрузка ${asset.name}`);
 
-      const cdnUrl = asset.url;
-      const proxyUrl = this.resolveAssetUrl(assetId, asset.url);
-      const urlsToTry: string[] = [];
-      if (cdnUrl && cdnUrl.startsWith('http') && cdnUrl !== proxyUrl) {
-        urlsToTry.push(cdnUrl);
-      }
-      urlsToTry.push(proxyUrl);
+      const urlsToTry = this.getUrlsToTry(assetId, asset.url);
 
       if (asset.type === "image" || asset.type === "video") {
         let loaded = false;
@@ -913,11 +907,26 @@ export class VideoRenderer {
     const cdnUrl = originalUrl;
     const proxyUrl = this.resolveAssetUrl(assetId, originalUrl);
     const urls: string[] = [];
+    urls.push(proxyUrl);
     if (cdnUrl && cdnUrl.startsWith('http') && cdnUrl !== proxyUrl) {
       urls.push(cdnUrl);
     }
-    urls.push(proxyUrl);
     return urls;
+  }
+
+  private async fetchWithRetry(url: string, retries = 2, delayMs = 1500): Promise<Response> {
+    const fetchOpts: RequestInit = url.startsWith('blob:') ? {} : { mode: 'cors' };
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      const response = await fetch(url, fetchOpts);
+      if (response.ok) return response;
+      if (response.status >= 500 && attempt < retries) {
+        console.warn(`[Render] HTTP ${response.status}, retrying in ${delayMs}ms (attempt ${attempt + 1}/${retries})`);
+        await new Promise(r => setTimeout(r, delayMs));
+        continue;
+      }
+      throw new Error(`HTTP ${response.status}`);
+    }
+    throw new Error('Max retries reached');
   }
 
   private async fetchAudioBuffer(
@@ -929,9 +938,7 @@ export class VideoRenderer {
     const urlsToTry = this.getUrlsToTry(assetId, asset.url);
     for (const url of urlsToTry) {
       try {
-        const fetchOpts: RequestInit = url.startsWith('blob:') ? {} : { mode: 'cors' };
-        const response = await fetch(url, fetchOpts);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const response = await this.fetchWithRetry(url);
         const arrayBuffer = await response.arrayBuffer();
         if (arrayBuffer.byteLength === 0) throw new Error('Empty audio data');
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
