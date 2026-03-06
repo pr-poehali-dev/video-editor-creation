@@ -70,6 +70,9 @@ const Dashboard = () => {
   const [mediaFiles, setMediaFiles] = useState<Array<{id: number; file_name: string; file_type: string; mime_type: string; file_size: number; duration: number; width: number; height: number; cdn_url: string; created_at: string}>>([]);
   const [renameProject, setRenameProject] = useState<Project | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [savingName, setSavingName] = useState(false);
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
   const [mediaUploading, setMediaUploading] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -155,6 +158,20 @@ const Dashboard = () => {
       toast({ title: 'Ошибка', description: 'Не удалось переименовать проект', variant: 'destructive' });
     }
     setRenameProject(null);
+  };
+
+  const handleInlineSave = async (projectId: number) => {
+    if (!editingName.trim()) return;
+    setSavingName(true);
+    try {
+      await projects.save({ id: projectId, name: editingName.trim() });
+      setMyProjects(prev => prev.map(p => p.id === projectId ? { ...p, name: editingName.trim() } : p));
+      toast({ title: 'Название сохранено' });
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось сохранить название', variant: 'destructive' });
+    }
+    setSavingName(false);
+    setEditingProjectId(null);
   };
 
   const handleDeleteProject = async () => {
@@ -300,26 +317,63 @@ const Dashboard = () => {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {myProjects.map(p => (
-                    <div key={p.id} className="rounded-lg overflow-hidden group cursor-pointer hover:ring-1 hover:ring-primary/50 transition-all relative" style={{ background: 'hsl(var(--editor-bg))' }}>
-                      <div onClick={() => navigate(`/editor/${p.id}`)} className="aspect-video flex items-center justify-center" style={{ background: 'hsl(var(--editor-panel-header))' }}>
+                    <div key={p.id} className="rounded-lg overflow-hidden group hover:ring-1 hover:ring-primary/50 transition-all relative" style={{ background: 'hsl(var(--editor-bg))' }}>
+                      <div onClick={() => navigate(`/editor/${p.id}`)} className="aspect-video flex items-center justify-center cursor-pointer" style={{ background: 'hsl(var(--editor-panel-header))' }}>
                         {p.thumbnail_url ? (
                           <img src={p.thumbnail_url} alt={p.name} className="w-full h-full object-cover" />
                         ) : (
                           <Icon name="Film" size={32} className="text-muted-foreground/30" />
                         )}
                       </div>
-                      <div className="p-3 flex items-start justify-between" onClick={() => navigate(`/editor/${p.id}`)}>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium truncate">{p.name}</div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5">
-                            {new Date(p.updated_at).toLocaleDateString('ru-RU')}
-                            {p.is_public && <span className="ml-2 text-green-400">Публичный</span>}
+                      <div className="p-3">
+                        {editingProjectId === p.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              value={editingName}
+                              onChange={e => setEditingName(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') handleInlineSave(p.id);
+                                if (e.key === 'Escape') setEditingProjectId(null);
+                              }}
+                              className="h-7 text-sm bg-secondary/50 border-border"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleInlineSave(p.id)}
+                              disabled={savingName || !editingName.trim()}
+                              className="shrink-0 h-7 px-2.5 rounded text-[10px] font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
+                            >
+                              <Icon name={savingName ? 'Loader2' : 'Check'} size={11} className={savingName ? 'animate-spin' : ''} />
+                              Сохранить
+                            </button>
+                            <button
+                              onClick={() => setEditingProjectId(null)}
+                              className="shrink-0 w-7 h-7 rounded flex items-center justify-center hover:bg-secondary/50"
+                            >
+                              <Icon name="X" size={11} className="text-muted-foreground" />
+                            </button>
                           </div>
-                        </div>
+                        ) : (
+                          <div className="flex items-start justify-between">
+                            <div className="min-w-0 flex-1 cursor-pointer" onClick={() => navigate(`/editor/${p.id}`)}>
+                              <div
+                                className="text-sm font-medium truncate hover:text-primary transition-colors cursor-text"
+                                onClick={(e) => { e.stopPropagation(); setEditingProjectId(p.id); setEditingName(p.name); }}
+                                title="Нажмите, чтобы переименовать"
+                              >
+                                {p.name}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground mt-0.5">
+                                {new Date(p.updated_at).toLocaleDateString('ru-RU')}
+                                {p.is_public && <span className="ml-2 text-green-400">Публичный</span>}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={(e) => { e.stopPropagation(); setRenameProject(p); setRenameValue(p.name); }}
+                          onClick={(e) => { e.stopPropagation(); setEditingProjectId(p.id); setEditingName(p.name); }}
                           className="w-7 h-7 rounded-md bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
                           title="Переименовать"
                         >

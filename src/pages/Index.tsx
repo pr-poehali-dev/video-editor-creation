@@ -41,11 +41,15 @@ const Index = () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const p = res.project as any;
         if (p) {
-          setProject({ id: pid, name: p.name || 'Проект' });
+          const projectName = p.name || 'Проект';
           if (p.project_data && typeof p.project_data === 'object') {
             const pd = p.project_data;
-            if (pd.tracks) loadProjectData({ tracks: pd.tracks, project: pd.project, exportSettings: pd.exportSettings, assets: pd.assets });
+            if (pd.tracks) {
+              const projectSettings = pd.project ? { ...pd.project, name: projectName } : { name: projectName };
+              loadProjectData({ tracks: pd.tracks, project: projectSettings, exportSettings: pd.exportSettings, assets: pd.assets });
+            }
           }
+          setProject({ id: pid, name: projectName });
         }
       }).catch(() => {});
     }
