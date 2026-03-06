@@ -305,12 +305,13 @@ export class VideoRenderer {
 
       const audioSrc = this.resolveAssetUrl(ac.assetId, asset.url);
       try {
-        const response = await fetch(audioSrc);
+        const response = await fetch(audioSrc, { mode: 'cors' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const arrayBuffer = await response.arrayBuffer();
         const audioBuffer = await tempAudioCtx.decodeAudioData(arrayBuffer);
         audioBufferMap.set(ac.assetId, audioBuffer);
-      } catch {
-        console.warn(`Не удалось загрузить аудио: ${asset.name}`);
+      } catch (err) {
+        console.warn(`Не удалось загрузить аудио: ${asset.name}`, err);
       }
     }
 
@@ -319,6 +320,27 @@ export class VideoRenderer {
     const hasAudio = audioClips.some(ac => ac.assetId && audioBufferMap.has(ac.assetId));
     const audioSampleRate = 48000;
     const audioChannels = 2;
+
+    if (hasAudio && typeof AudioEncoder !== 'undefined') {
+      try {
+        const support = await AudioEncoder.isConfigSupported({
+          codec: 'mp4a.40.2',
+          sampleRate: audioSampleRate,
+          numberOfChannels: audioChannels,
+          bitrate: 128_000,
+        });
+        if (!support.supported) {
+          console.warn("AAC not supported — switching to WebM for audio support");
+          return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+        }
+      } catch {
+        console.warn("AudioEncoder check failed — switching to WebM");
+        return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+      }
+    } else if (hasAudio && typeof AudioEncoder === 'undefined') {
+      console.warn("AudioEncoder API not available — switching to WebM for audio support");
+      return this.renderWebm(clips, audioClips, assetMap, imageCache, width, height, fps, totalDuration, bitrate, exportSettings, report);
+    }
 
     const muxer = new Muxer({
       target: new ArrayBufferTarget(),
@@ -443,61 +465,61 @@ export class VideoRenderer {
 
       const renderedAudioBuffer = await offlineCtx.startRendering();
 
-      try {
-        let audioEncoderFailed = false;
+      let audioEncoderFailed = false;
 
-        const audioEncoder = new AudioEncoder({
-          output: (chunk, meta) => {
-            muxer.addAudioChunk(chunk, meta);
-          },
-          error: (e) => {
-            console.error("AudioEncoder error:", e);
-            audioEncoderFailed = true;
-          },
-        });
+      const audioEncoder = new AudioEncoder({
+        output: (chunk, meta) => {
+          muxer.addAudioChunk(chunk, meta);
+        },
+        error: (e) => {
+          console.error("AudioEncoder error:", e);
+          audioEncoderFailed = true;
+        },
+      });
 
-        audioEncoder.configure({
-          codec: 'mp4a.40.2',
+      audioEncoder.configure({
+        codec: 'mp4a.40.2',
+        sampleRate: audioSampleRate,
+        numberOfChannels: audioChannels,
+        bitrate: 128_000,
+      });
+
+      const totalSamples = renderedAudioBuffer.length;
+      const chunkSize = 1024;
+
+      for (let offset = 0; offset < totalSamples; offset += chunkSize) {
+        if (this.cancelled) {
+          audioEncoder.close();
+          throw new Error("Отменено");
+        }
+        if (audioEncoderFailed) break;
+
+        const framesInChunk = Math.min(chunkSize, totalSamples - offset);
+
+        const audioData = new AudioData({
+          format: 'f32-planar',
           sampleRate: audioSampleRate,
+          numberOfFrames: framesInChunk,
           numberOfChannels: audioChannels,
-          bitrate: 128_000,
+          timestamp: Math.round((offset / audioSampleRate) * 1_000_000),
+          data: this.createPlanarAudioBuffer(renderedAudioBuffer, offset, framesInChunk, audioChannels),
         });
 
-        const totalSamples = renderedAudioBuffer.length;
-        const chunkSize = 1024;
+        audioEncoder.encode(audioData);
+        audioData.close();
 
-        for (let offset = 0; offset < totalSamples; offset += chunkSize) {
-          if (this.cancelled) {
-            audioEncoder.close();
-            throw new Error("Отменено");
-          }
-          if (audioEncoderFailed) break;
-
-          const framesInChunk = Math.min(chunkSize, totalSamples - offset);
-
-          const audioData = new AudioData({
-            format: 'f32-planar',
-            sampleRate: audioSampleRate,
-            numberOfFrames: framesInChunk,
-            numberOfChannels: audioChannels,
-            timestamp: Math.round((offset / audioSampleRate) * 1_000_000),
-            data: this.createPlanarAudioBuffer(renderedAudioBuffer, offset, framesInChunk, audioChannels),
-          });
-
-          audioEncoder.encode(audioData);
-          audioData.close();
-
-          if ((offset / chunkSize) % 50 === 0) {
-            await new Promise(r => setTimeout(r, 0));
-          }
+        if ((offset / chunkSize) % 50 === 0) {
+          await new Promise(r => setTimeout(r, 0));
         }
+      }
 
-        if (!audioEncoderFailed) {
-          await audioEncoder.flush();
-        }
-        audioEncoder.close();
-      } catch (audioErr) {
-        console.warn("Audio encoding failed, producing video without audio:", audioErr);
+      if (!audioEncoderFailed) {
+        await audioEncoder.flush();
+      }
+      audioEncoder.close();
+
+      if (audioEncoderFailed) {
+        console.warn("Audio encoding failed mid-process — video will have no audio");
       }
     }
 
@@ -666,12 +688,13 @@ export class VideoRenderer {
       const audioSrc = this.resolveAssetUrl(ac.assetId, asset.url);
 
       try {
-        const response = await fetch(audioSrc);
+        const response = await fetch(audioSrc, { mode: 'cors' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const arrayBuffer = await response.arrayBuffer();
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
         audioBufferMap.set(ac.assetId, audioBuffer);
-      } catch {
-        console.warn(`Не удалось загрузить аудио: ${asset.name}`);
+      } catch (err) {
+        console.warn(`Не удалось загрузить аудио: ${asset.name}`, err);
       }
     }
 
@@ -838,6 +861,9 @@ export class VideoRenderer {
   }
 
   private resolveAssetUrl(assetId: string, originalUrl: string): string {
+    if (originalUrl && (originalUrl.startsWith("https://") || originalUrl.startsWith("http://"))) {
+      return originalUrl;
+    }
     if (assetId.startsWith("server_")) {
       const serverId = parseInt(assetId.replace("server_", ""), 10);
       if (!isNaN(serverId)) {
