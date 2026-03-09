@@ -1095,9 +1095,13 @@ export class VideoRenderer {
 
       if (!resp || !resp.ok) throw new Error(`Chunk ${i} failed after retries`);
 
-      const buf = await resp.arrayBuffer();
-      chunks.push(new Uint8Array(buf));
-      downloaded += buf.byteLength;
+      const json = await resp.json();
+      if (json.error) throw new Error(`Chunk ${i}: ${json.error}`);
+      const binaryStr = atob(json.data);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+      chunks.push(bytes);
+      downloaded += bytes.byteLength;
       const progress = 0.2 + 0.6 * (downloaded / totalSize);
       onProgress?.(progress);
       console.log(`[${label}] Chunk ${i + 1}/${totalChunks}: ${(downloaded / 1024 / 1024).toFixed(1)}/${(totalSize / 1024 / 1024).toFixed(1)}MB`);

@@ -433,15 +433,6 @@ def handle_proxy(conn, user, qs):
         data = obj['Body'].read()
         b64_data = base64.b64encode(data).decode('utf-8')
 
-        return {
-            'statusCode': 200,
-            'headers': {
-                **CORS,
-                'Content-Type': mime_type,
-                'Cache-Control': 'public, max-age=86400',
-            },
-            'body': b64_data,
-            'isBase64Encoded': True,
-        }
+        return ok({'data': b64_data, 'mime_type': mime_type, 'size': len(data)})
     except Exception as e:
         return err(f'Ошибка при загрузке файла: {str(e)}', 500)
