@@ -311,17 +311,29 @@ export class VideoRenderer {
 
     report(0.22, "Загрузка аудио");
 
+    console.log(`[Render] === AUDIO LOADING PHASE ===`);
+    console.log(`[Render] audioClips count: ${audioClips.length}`);
+    audioClips.forEach((ac, idx) => {
+      const a = ac.assetId ? assetMap.get(ac.assetId) : null;
+      console.log(`[Render] audioClip[${idx}]: name="${ac.name}", assetId=${ac.assetId}, hasAsset=${!!a}, assetType=${a?.type}, assetUrl=${a?.url?.substring(0, 60)}, vol=${ac.volume}, muted=${ac.trackMuted}`);
+    });
+
     const tempAudioCtx = new AudioContext();
+    console.log(`[Render] AudioContext created: state=${tempAudioCtx.state}, sampleRate=${tempAudioCtx.sampleRate}`);
+
     const audioBufferMap = new Map<string, AudioBuffer>();
 
     const uniqueAudioAssets = audioClips.filter(ac => ac.assetId && !audioBufferMap.has(ac.assetId) && assetMap.has(ac.assetId));
     const totalAudioAssets = uniqueAudioAssets.length;
+    console.log(`[Render] uniqueAudioAssets to load: ${totalAudioAssets}`);
 
     for (let i = 0; i < uniqueAudioAssets.length; i++) {
       const ac = uniqueAudioAssets[i];
       if (!ac.assetId || audioBufferMap.has(ac.assetId)) continue;
       const asset = assetMap.get(ac.assetId);
       if (!asset) continue;
+
+      console.log(`[Render] Loading audio ${i + 1}/${totalAudioAssets}: "${asset.name}" (id=${ac.assetId})`);
 
       const audioProgress = (p: number) => {
         const base = 0.22;
@@ -334,12 +346,16 @@ export class VideoRenderer {
       const audioBuffer = await this.fetchAudioBuffer(tempAudioCtx, ac.assetId, asset, 'Render', audioProgress);
       if (audioBuffer) {
         audioBufferMap.set(ac.assetId, audioBuffer);
+        console.log(`[Render] ✓ Audio buffer saved: "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s`);
+      } else {
+        console.error(`[Render] ✗ FAILED to load audio: "${asset.name}"`);
       }
     }
 
     await tempAudioCtx.close();
 
     const hasAudio = audioClips.some(ac => ac.assetId && audioBufferMap.has(ac.assetId));
+    console.log(`[Render] === AUDIO LOADING COMPLETE: hasAudio=${hasAudio}, buffersLoaded=${audioBufferMap.size}/${totalAudioAssets} ===`);
     const audioSampleRate = 48000;
     const audioChannels = 2;
 
@@ -965,57 +981,58 @@ export class VideoRenderer {
   ): Promise<AudioBuffer | null> {
     const serverId = assetId.startsWith("server_") ? parseInt(assetId.replace("server_", ""), 10) : NaN;
 
-    onProgress?.(0.05);
-
-    if (asset.url && asset.url.startsWith('http')) {
-      try {
-        console.log(`[${label}] Trying CDN URL first: ${asset.name}, url=${asset.url.substring(0, 80)}`);
-        onProgress?.(0.1);
-        const resp = await fetch(asset.url, { mode: 'cors' });
-        if (resp.ok) {
-          const contentLength = parseInt(resp.headers.get('content-length') || '0', 10);
-          console.log(`[${label}] CDN response OK, content-length=${contentLength}`);
-          onProgress?.(0.4);
-          const arrayBuffer = await resp.arrayBuffer();
-          if (arrayBuffer.byteLength > 0) {
-            onProgress?.(0.7);
-            console.log(`[${label}] CDN downloaded ${(arrayBuffer.byteLength/1024/1024).toFixed(1)}MB, decoding...`);
-            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            onProgress?.(1);
-            console.log(`[${label}] Audio loaded (CDN): ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, size=${(arrayBuffer.byteLength/1024/1024).toFixed(1)}MB`);
-            return audioBuffer;
-          }
-        } else {
-          console.warn(`[${label}] CDN returned ${resp.status}: ${asset.name}`);
-        }
-      } catch (err) {
-        console.warn(`[${label}] CDN fetch failed: ${asset.name}`, err);
-      }
-    }
+    onProgress?.(0.02);
+    console.log(`[${label}] === AUDIO LOAD START: "${asset.name}", assetId=${assetId}, serverId=${serverId} ===`);
 
     if (!isNaN(serverId)) {
       try {
-        console.log(`[${label}] Trying chunked proxy download: ${asset.name}`);
-        onProgress?.(0.15);
+        console.log(`[${label}] Method 1: Chunked proxy download for serverId=${serverId}`);
+        onProgress?.(0.05);
         const arrayBuffer = await this.fetchChunked(serverId, label, onProgress);
+        console.log(`[${label}] Chunked download complete: ${arrayBuffer.byteLength} bytes`);
         if (arrayBuffer.byteLength > 0) {
           onProgress?.(0.85);
+          console.log(`[${label}] Decoding audio data...`);
           const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
           onProgress?.(1);
-          console.log(`[${label}] Audio loaded (chunked): ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, size=${(arrayBuffer.byteLength/1024/1024).toFixed(1)}MB`);
+          console.log(`[${label}] === AUDIO OK (chunked): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s, channels=${audioBuffer.numberOfChannels} ===`);
           return audioBuffer;
         }
+        console.warn(`[${label}] Chunked returned empty data`);
       } catch (err) {
-        console.warn(`[${label}] Chunked proxy failed: ${asset.name}`, err);
+        console.error(`[${label}] Chunked proxy FAILED:`, err);
       }
     }
 
-    console.error(`[${label}] Не удалось загрузить аудио: ${asset.name}`);
+    if (asset.url && asset.url.startsWith('http')) {
+      try {
+        console.log(`[${label}] Method 2: Direct CDN URL: ${asset.url.substring(0, 80)}`);
+        onProgress?.(0.1);
+        const resp = await fetch(asset.url, { mode: 'cors' });
+        console.log(`[${label}] CDN response: status=${resp.status}, ok=${resp.ok}`);
+        if (resp.ok) {
+          onProgress?.(0.4);
+          const arrayBuffer = await resp.arrayBuffer();
+          console.log(`[${label}] CDN downloaded: ${arrayBuffer.byteLength} bytes`);
+          if (arrayBuffer.byteLength > 0) {
+            onProgress?.(0.8);
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            onProgress?.(1);
+            console.log(`[${label}] === AUDIO OK (CDN): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
+            return audioBuffer;
+          }
+        }
+      } catch (err) {
+        console.error(`[${label}] CDN fetch FAILED (likely CORS):`, err);
+      }
+    }
+
+    console.error(`[${label}] === ALL METHODS FAILED: "${asset.name}" — VIDEO WILL HAVE NO AUDIO ===`);
     return null;
   }
 
   private async fetchChunked(serverId: number, label: string, onProgress?: (p: number) => void): Promise<ArrayBuffer> {
-    const CHUNK_SIZE = 1.5 * 1024 * 1024;
+    const CHUNK_SIZE = Math.floor(1.5 * 1024 * 1024);
     const infoUrl = mediaApi.proxyInfoUrl(serverId);
     const infoResp = await fetch(infoUrl, { mode: 'cors' });
     if (!infoResp.ok) throw new Error(`Info request failed: ${infoResp.status}`);

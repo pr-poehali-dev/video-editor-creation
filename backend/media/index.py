@@ -88,6 +88,11 @@ def handler(event, context):
         conn.close()
         return err('Необходима авторизация', 401)
 
+    if route == '/presign' and method == 'GET':
+        result = handle_presign(conn, user, qs)
+        conn.close()
+        return result
+
     if route == '/upload' and method == 'POST':
         result = handle_upload(conn, user, event)
         conn.close()
@@ -358,43 +363,85 @@ def handle_delete(conn, user, event):
     return ok({'deleted': True})
 
 
-def handle_proxy(conn, user, qs):
+def handle_presign(conn, user, qs):
     file_id = qs.get('id')
     if not file_id:
         return err('id обязателен')
 
     cur = conn.cursor()
-    cur.execute("SELECT s3_key, mime_type FROM media_files WHERE id = %s AND user_id = %s AND s3_key != 'deleted'", (int(file_id), user['id']))
+    cur.execute("SELECT s3_key, mime_type, file_size FROM media_files WHERE id = %s AND user_id = %s AND s3_key != 'deleted'", (int(file_id), user['id']))
     row = cur.fetchone()
     cur.close()
     if not row:
         return err('Файл не найден', 404)
 
-    s3_key, mime_type = row
+    s3_key, mime_type, file_size = row
     s3 = get_s3()
 
-    if qs.get('info') == '1':
-        head = s3.head_object(Bucket='files', Key=s3_key)
-        return ok({'size': head['ContentLength'], 'mime_type': mime_type})
+    presigned_url = s3.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': 'files', 'Key': s3_key},
+        ExpiresIn=3600,
+    )
 
-    range_start = qs.get('start')
-    range_end = qs.get('end')
+    return ok({'url': presigned_url, 'mime_type': mime_type, 'size': file_size})
 
-    s3_params = {'Bucket': 'files', 'Key': s3_key}
-    if range_start is not None and range_end is not None:
-        s3_params['Range'] = f'bytes={int(range_start)}-{int(range_end)}'
 
-    obj = s3.get_object(**s3_params)
-    data = obj['Body'].read()
-    b64_data = base64.b64encode(data).decode('utf-8')
+def handle_proxy(conn, user, qs):
+    file_id = qs.get('id')
+    if not file_id:
+        return err('id обязателен')
 
-    return {
-        'statusCode': 200,
-        'headers': {
-            **CORS,
-            'Content-Type': mime_type,
-            'Cache-Control': 'public, max-age=86400',
-        },
-        'body': b64_data,
-        'isBase64Encoded': True,
-    }
+    try:
+        fid = int(file_id)
+    except (ValueError, TypeError):
+        return err('Неверный id')
+
+    cur = conn.cursor()
+    cur.execute("SELECT s3_key, mime_type, file_size FROM media_files WHERE id = %s AND user_id = %s AND s3_key != 'deleted'", (fid, user['id']))
+    row = cur.fetchone()
+    cur.close()
+    if not row:
+        return err('Файл не найден', 404)
+
+    s3_key, mime_type, file_size = row
+
+    try:
+        s3 = get_s3()
+
+        if qs.get('info') == '1':
+            return ok({'size': file_size or 0, 'mime_type': mime_type})
+
+        range_start = qs.get('start')
+        range_end = qs.get('end')
+
+        MAX_PROXY_SIZE = 4 * 1024 * 1024
+
+        if range_start is not None and range_end is not None:
+            start = int(range_start)
+            end = int(range_end)
+            chunk_size = end - start + 1
+            if chunk_size > MAX_PROXY_SIZE:
+                end = start + MAX_PROXY_SIZE - 1
+            s3_params = {'Bucket': 'files', 'Key': s3_key, 'Range': f'bytes={start}-{end}'}
+        else:
+            if file_size and file_size > MAX_PROXY_SIZE:
+                return err(f'Файл слишком большой для прямого прокси ({file_size} bytes). Используйте chunked загрузку с параметрами start/end', 413)
+            s3_params = {'Bucket': 'files', 'Key': s3_key}
+
+        obj = s3.get_object(**s3_params)
+        data = obj['Body'].read()
+        b64_data = base64.b64encode(data).decode('utf-8')
+
+        return {
+            'statusCode': 200,
+            'headers': {
+                **CORS,
+                'Content-Type': mime_type,
+                'Cache-Control': 'public, max-age=86400',
+            },
+            'body': b64_data,
+            'isBase64Encoded': True,
+        }
+    except Exception as e:
+        return err(f'Ошибка при загрузке файла: {str(e)}', 500)

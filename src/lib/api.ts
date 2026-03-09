@@ -126,6 +126,8 @@ export const media = {
     const token = getToken();
     return `${urls.media}?route=${encodeURIComponent('/proxy')}&id=${id}&token=${token}&start=${start}&end=${end}`;
   },
+  presign: (id: number) =>
+    request(urls.media, `/presign?id=${id}`),
 };
 
 export default { auth, wallet, projects, admin, shop, media };
