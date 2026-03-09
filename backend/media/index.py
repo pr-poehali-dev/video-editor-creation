@@ -415,7 +415,7 @@ def handle_proxy(conn, user, qs):
         range_start = qs.get('start')
         range_end = qs.get('end')
 
-        MAX_PROXY_SIZE = 4 * 1024 * 1024
+        MAX_PROXY_SIZE = 256 * 1024
 
         if range_start is not None and range_end is not None:
             start = int(range_start)
