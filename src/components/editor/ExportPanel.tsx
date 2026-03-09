@@ -110,8 +110,16 @@ const ExportPanel = () => {
     setResultUrl('');
 
     try {
-      const { VideoRenderer } = await import('@/lib/video-renderer');
-      const renderer = new VideoRenderer();
+      let VideoRendererClass;
+      try {
+        const mod = await import('@/lib/video-renderer');
+        VideoRendererClass = mod.VideoRenderer;
+      } catch (importErr) {
+        console.error('Dynamic import failed, reloading page:', importErr);
+        window.location.reload();
+        return;
+      }
+      const renderer = new VideoRendererClass();
       rendererRef.current = renderer;
 
       setExportStage('Инициализация...');
