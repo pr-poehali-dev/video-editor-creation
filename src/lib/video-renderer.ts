@@ -986,21 +986,28 @@ export class VideoRenderer {
 
     if (!isNaN(serverId)) {
       try {
-        console.log(`[${label}] Method 1: Chunked proxy download for serverId=${serverId}`);
+        console.log(`[${label}] Method 1: Presigned URL for serverId=${serverId}`);
         onProgress?.(0.05);
-        const arrayBuffer = await this.fetchChunked(serverId, label, onProgress);
-        console.log(`[${label}] Chunked download complete: ${arrayBuffer.byteLength} bytes`);
-        if (arrayBuffer.byteLength > 0) {
-          onProgress?.(0.85);
-          console.log(`[${label}] Decoding audio data...`);
-          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-          onProgress?.(1);
-          console.log(`[${label}] === AUDIO OK (chunked): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s, channels=${audioBuffer.numberOfChannels} ===`);
-          return audioBuffer;
+        const presignResp = await mediaApi.presign(serverId);
+        if (presignResp.url) {
+          console.log(`[${label}] Got presigned URL, downloading...`);
+          onProgress?.(0.1);
+          const resp = await fetch(presignResp.url);
+          if (resp.ok) {
+            onProgress?.(0.5);
+            const arrayBuffer = await resp.arrayBuffer();
+            console.log(`[${label}] Downloaded: ${arrayBuffer.byteLength} bytes`);
+            if (arrayBuffer.byteLength > 0) {
+              onProgress?.(0.85);
+              const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+              onProgress?.(1);
+              console.log(`[${label}] === AUDIO OK (presigned): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s, channels=${audioBuffer.numberOfChannels} ===`);
+              return audioBuffer;
+            }
+          }
         }
-        console.warn(`[${label}] Chunked returned empty data`);
       } catch (err) {
-        console.error(`[${label}] Chunked proxy FAILED:`, err);
+        console.error(`[${label}] Presigned URL FAILED:`, err);
       }
     }
 
