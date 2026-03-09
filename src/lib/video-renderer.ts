@@ -319,6 +319,9 @@ export class VideoRenderer {
     });
 
     const tempAudioCtx = new AudioContext();
+    if (tempAudioCtx.state === 'suspended') {
+      await tempAudioCtx.resume();
+    }
     console.log(`[Render] AudioContext created: state=${tempAudioCtx.state}, sampleRate=${tempAudioCtx.sampleRate}`);
 
     const audioBufferMap = new Map<string, AudioBuffer>();
@@ -972,6 +975,20 @@ export class VideoRenderer {
     throw new Error('Max retries reached');
   }
 
+  private async ensureAudioCtxReady(audioCtx: AudioContext | OfflineAudioContext, label: string): Promise<void> {
+    if (audioCtx instanceof AudioContext && audioCtx.state === 'suspended') {
+      console.log(`[${label}] AudioContext suspended, resuming...`);
+      await audioCtx.resume();
+      console.log(`[${label}] AudioContext resumed: state=${audioCtx.state}`);
+    }
+  }
+
+  private async safeDecodeAudio(audioCtx: AudioContext | OfflineAudioContext, data: ArrayBuffer, label: string): Promise<AudioBuffer> {
+    await this.ensureAudioCtxReady(audioCtx, label);
+    const copy = data.slice(0);
+    return audioCtx.decodeAudioData(copy);
+  }
+
   private async fetchAudioBuffer(
     audioCtx: AudioContext | OfflineAudioContext,
     assetId: string,
@@ -986,20 +1003,40 @@ export class VideoRenderer {
 
     if (!isNaN(serverId)) {
       try {
-        console.log(`[${label}] Method 1: Presigned URL for serverId=${serverId}`);
+        console.log(`[${label}] Method 1: Chunked proxy for serverId=${serverId}`);
+        onProgress?.(0.1);
+        const arrayBuffer = await this.fetchChunked(serverId, label, (p) => {
+          onProgress?.(0.1 + p * 0.7);
+        });
+        console.log(`[${label}] Chunked downloaded: ${arrayBuffer.byteLength} bytes`);
+        if (arrayBuffer.byteLength > 0) {
+          onProgress?.(0.85);
+          const audioBuffer = await this.safeDecodeAudio(audioCtx, arrayBuffer, label);
+          onProgress?.(1);
+          console.log(`[${label}] === AUDIO OK (chunked proxy): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
+          return audioBuffer;
+        }
+      } catch (err) {
+        console.error(`[${label}] Chunked proxy FAILED:`, err);
+      }
+    }
+
+    if (!isNaN(serverId)) {
+      try {
+        console.log(`[${label}] Method 2: Presigned URL for serverId=${serverId}`);
         onProgress?.(0.05);
         const presignResp = await mediaApi.presign(serverId);
         if (presignResp.url) {
           console.log(`[${label}] Got presigned URL, downloading...`);
           onProgress?.(0.1);
-          const resp = await fetch(presignResp.url);
+          const resp = await fetch(presignResp.url as string, { mode: 'cors' });
           if (resp.ok) {
             onProgress?.(0.5);
             const arrayBuffer = await resp.arrayBuffer();
             console.log(`[${label}] Downloaded: ${arrayBuffer.byteLength} bytes`);
             if (arrayBuffer.byteLength > 0) {
               onProgress?.(0.85);
-              const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+              const audioBuffer = await this.safeDecodeAudio(audioCtx, arrayBuffer, label);
               onProgress?.(1);
               console.log(`[${label}] === AUDIO OK (presigned): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s, channels=${audioBuffer.numberOfChannels} ===`);
               return audioBuffer;
@@ -1008,26 +1045,6 @@ export class VideoRenderer {
         }
       } catch (err) {
         console.error(`[${label}] Presigned URL FAILED:`, err);
-      }
-    }
-
-    if (!isNaN(serverId)) {
-      try {
-        console.log(`[${label}] Method 2: Chunked proxy for serverId=${serverId}`);
-        onProgress?.(0.1);
-        const arrayBuffer = await this.fetchChunked(serverId, label, (p) => {
-          onProgress?.(0.1 + p * 0.7);
-        });
-        console.log(`[${label}] Chunked downloaded: ${arrayBuffer.byteLength} bytes`);
-        if (arrayBuffer.byteLength > 0) {
-          onProgress?.(0.85);
-          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-          onProgress?.(1);
-          console.log(`[${label}] === AUDIO OK (chunked proxy): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
-          return audioBuffer;
-        }
-      } catch (err) {
-        console.error(`[${label}] Chunked proxy FAILED:`, err);
       }
     }
 
@@ -1043,7 +1060,7 @@ export class VideoRenderer {
           console.log(`[${label}] CDN downloaded: ${arrayBuffer.byteLength} bytes`);
           if (arrayBuffer.byteLength > 0) {
             onProgress?.(0.8);
-            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            const audioBuffer = await this.safeDecodeAudio(audioCtx, arrayBuffer, label);
             onProgress?.(1);
             console.log(`[${label}] === AUDIO OK (CDN): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
             return audioBuffer;
