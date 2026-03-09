@@ -1,0 +1,19 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS for CORS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedHeaders": {
+        "Access-Control-Allow-Origin": "*"
+      }
+    },
+    {
+      "name": "Public access to list plans",
+      "method": "GET",
+      "path": "/?action=list-plans",
+      "expectedStatus": 200
+    }
+  ]
+}

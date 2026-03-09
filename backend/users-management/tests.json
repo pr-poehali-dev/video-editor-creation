@@ -1,0 +1,24 @@
+{
+  "tests": [
+    {
+      "name": "Проверка блокировки пользователя",
+      "method": "GET",
+      "path": "/?checkUserId=17",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "blocked": true
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Получение списка пользователей",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "users": "array"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

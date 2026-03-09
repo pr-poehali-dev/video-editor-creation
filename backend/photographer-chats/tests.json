@@ -1,0 +1,23 @@
+{
+  "tests": [
+    {
+      "name": "Get photographer chats",
+      "method": "GET",
+      "headers": {
+        "X-User-Id": "22"
+      },
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Delete chat with client",
+      "method": "DELETE",
+      "path": "/?client_id=999",
+      "headers": {
+        "X-User-Id": "22"
+      },
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "tests": [
+    {
+      "name": "Get messages list",
+      "method": "GET",
+      "path": "/?client_id=161&photographer_id=22",
+      "expectedStatus": 200
+    }
+  ]
+}

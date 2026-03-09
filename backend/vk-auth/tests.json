@@ -1,0 +1,19 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS request for CORS",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Start VK OAuth flow",
+      "method": "GET",
+      "path": "/?action=start&device_id=web",
+      "expectedStatus": 302,
+      "expectedHeaders": {
+        "Location": "string"
+      }
+    }
+  ]
+}

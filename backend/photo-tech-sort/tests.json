@@ -1,0 +1,18 @@
+{
+  "tests": [
+    {
+      "name": "Missing folder_id",
+      "method": "POST",
+      "headers": {
+        "X-User-Id": "1",
+        "Content-Type": "application/json"
+      },
+      "body": "{}",
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "folder_id is required"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

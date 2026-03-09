@@ -1,0 +1,884 @@
+import json
+import os
+import psycopg2
+import random
+import string
+import boto3
+from botocore.client import Config
+from datetime import datetime, timedelta
+
+REGION_TIMEZONE = {
+    "Калининградская область": "Europe/Kaliningrad",
+    "Москва": "Europe/Moscow", "Московская область": "Europe/Moscow",
+    "Санкт-Петербург": "Europe/Moscow", "Ленинградская область": "Europe/Moscow",
+    "Адыгея": "Europe/Moscow", "Республика Адыгея": "Europe/Moscow",
+    "Архангельская область": "Europe/Moscow",
+    "Белгородская область": "Europe/Moscow",
+    "Брянская область": "Europe/Moscow",
+    "Владимирская область": "Europe/Moscow",
+    "Вологодская область": "Europe/Moscow",
+    "Воронежская область": "Europe/Moscow",
+    "Ивановская область": "Europe/Moscow",
+    "Калужская область": "Europe/Moscow",
+    "Карелия": "Europe/Moscow", "Республика Карелия": "Europe/Moscow",
+    "Коми": "Europe/Moscow", "Республика Коми": "Europe/Moscow",
+    "Костромская область": "Europe/Moscow",
+    "Краснодарский край": "Europe/Moscow",
+    "Курская область": "Europe/Moscow",
+    "Липецкая область": "Europe/Moscow",
+    "Марий Эл": "Europe/Moscow", "Республика Марий Эл": "Europe/Moscow",
+    "Мордовия": "Europe/Moscow", "Республика Мордовия": "Europe/Moscow",
+    "Мурманская область": "Europe/Moscow",
+    "Ненецкий автономный округ": "Europe/Moscow",
+    "Нижегородская область": "Europe/Moscow",
+    "Новгородская область": "Europe/Moscow",
+    "Орловская область": "Europe/Moscow",
+    "Пензенская область": "Europe/Moscow",
+    "Псковская область": "Europe/Moscow",
+    "Ростовская область": "Europe/Moscow",
+    "Рязанская область": "Europe/Moscow",
+    "Смоленская область": "Europe/Moscow",
+    "Тамбовская область": "Europe/Moscow",
+    "Тверская область": "Europe/Moscow",
+    "Тульская область": "Europe/Moscow",
+    "Ярославская область": "Europe/Moscow",
+    "Кабардино-Балкария": "Europe/Moscow", "Кабардино-Балкарская Республика": "Europe/Moscow",
+    "Карачаево-Черкесия": "Europe/Moscow", "Карачаево-Черкесская Республика": "Europe/Moscow",
+    "Северная Осетия": "Europe/Moscow", "Республика Северная Осетия — Алания": "Europe/Moscow",
+    "Чечня": "Europe/Moscow", "Чеченская Республика": "Europe/Moscow",
+    "Ингушетия": "Europe/Moscow", "Республика Ингушетия": "Europe/Moscow",
+    "Дагестан": "Europe/Moscow", "Республика Дагестан": "Europe/Moscow",
+    "Ставропольский край": "Europe/Moscow",
+    "Крым": "Europe/Moscow", "Республика Крым": "Europe/Moscow",
+    "Севастополь": "Europe/Moscow",
+    "Волгоградская область": "Europe/Moscow",
+    "Кировская область": "Europe/Moscow",
+    "Астраханская область": "Europe/Samara",
+    "Самарская область": "Europe/Samara",
+    "Саратовская область": "Europe/Samara",
+    "Удмуртия": "Europe/Samara", "Удмуртская Республика": "Europe/Samara",
+    "Ульяновская область": "Europe/Samara",
+    "Башкортостан": "Asia/Yekaterinburg", "Республика Башкортостан": "Asia/Yekaterinburg",
+    "Курганская область": "Asia/Yekaterinburg",
+    "Оренбургская область": "Asia/Yekaterinburg",
+    "Пермский край": "Asia/Yekaterinburg",
+    "Свердловская область": "Asia/Yekaterinburg",
+    "Тюменская область": "Asia/Yekaterinburg",
+    "Челябинская область": "Asia/Yekaterinburg",
+    "Ханты-Мансийский автономный округ": "Asia/Yekaterinburg",
+    "Ямало-Ненецкий автономный округ": "Asia/Yekaterinburg",
+    "Татарстан": "Europe/Moscow", "Республика Татарстан": "Europe/Moscow",
+    "Чувашия": "Europe/Moscow", "Чувашская Республика": "Europe/Moscow",
+    "Алтайский край": "Asia/Barnaul",
+    "Республика Алтай": "Asia/Barnaul",
+    "Кемеровская область": "Asia/Novokuznetsk",
+    "Новосибирская область": "Asia/Novosibirsk",
+    "Омская область": "Asia/Omsk",
+    "Томская область": "Asia/Tomsk",
+    "Красноярский край": "Asia/Krasnoyarsk",
+    "Тыва": "Asia/Krasnoyarsk", "Республика Тыва": "Asia/Krasnoyarsk",
+    "Хакасия": "Asia/Krasnoyarsk", "Республика Хакасия": "Asia/Krasnoyarsk",
+    "Иркутская область": "Asia/Irkutsk",
+    "Бурятия": "Asia/Irkutsk", "Республика Бурятия": "Asia/Irkutsk",
+    "Забайкальский край": "Asia/Chita",
+    "Амурская область": "Asia/Yakutsk",
+    "Саха (Якутия)": "Asia/Yakutsk", "Республика Саха (Якутия)": "Asia/Yakutsk",
+    "Еврейская автономная область": "Asia/Vladivostok",
+    "Приморский край": "Asia/Vladivostok",
+    "Хабаровский край": "Asia/Vladivostok",
+    "Магаданская область": "Asia/Magadan",
+    "Сахалинская область": "Asia/Sakhalin",
+    "Камчатский край": "Asia/Kamchatka",
+    "Чукотский автономный округ": "Asia/Kamchatka",
+}
+
+def get_timezone_for_region(region):
+    if not region:
+        return "Europe/Moscow"
+    return REGION_TIMEZONE.get(region, "Europe/Moscow")
+
+def generate_short_code(length=8):
+    """Генерирует короткий уникальный код для ссылки"""
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choice(chars) for _ in range(length))
+
+def handler(event: dict, context) -> dict:
+    """
+    API для создания коротких ссылок на папки с фото и просмотра галереи
+    POST /gallery-share - создать короткую ссылку на папку
+    GET /gallery-share?code=xxx - получить все фото из папки
+    """
+    method = event.get('httpMethod', 'GET')
+    
+    if method == 'OPTIONS':
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, X-User-Id'
+            },
+            'body': ''
+        }
+    
+    dsn = os.environ.get('DATABASE_URL')
+    if not dsn:
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+            'body': json.dumps({'error': 'Database not configured'})
+        }
+    
+    try:
+        conn = psycopg2.connect(dsn)
+        cur = conn.cursor()
+        
+        if method == 'POST':
+            data = json.loads(event.get('body', '{}'))
+            folder_id = data.get('folder_id')
+            user_id = data.get('user_id') or event.get('headers', {}).get('x-user-id')
+            # Получаем expires_days: null = бессрочная, число = дней до истечения
+            # Если ключ отсутствует - по умолчанию 30 дней
+            expires_days = data['expires_days'] if 'expires_days' in data else 30
+            password = data.get('password')
+            download_disabled = data.get('download_disabled', False)
+            
+            watermark_enabled = data.get('watermark_enabled', False)
+            watermark_type = data.get('watermark_type', 'text')
+            watermark_text = data.get('watermark_text')
+            watermark_image_url = data.get('watermark_image_url')
+            watermark_frequency = data.get('watermark_frequency', 50)
+            watermark_size = data.get('watermark_size', 20)
+            watermark_opacity = data.get('watermark_opacity', 50)
+            watermark_rotation = data.get('watermark_rotation', 0)
+            screenshot_protection = data.get('screenshot_protection', False)
+            favorite_config = data.get('favorite_config')
+            client_upload_enabled = data.get('client_upload_enabled', False)
+            client_folders_visibility = data.get('client_folders_visibility', False)
+            
+            cover_photo_id = data.get('cover_photo_id')
+            cover_orientation = data.get('cover_orientation', 'horizontal')
+            cover_focus_x = data.get('cover_focus_x', 0.5)
+            cover_focus_y = data.get('cover_focus_y', 0.5)
+            grid_gap = data.get('grid_gap', 8)
+            
+            mobile_cover_photo_id = data.get('mobile_cover_photo_id')
+            mobile_cover_focus_x = data.get('mobile_cover_focus_x', 0.5)
+            mobile_cover_focus_y = data.get('mobile_cover_focus_y', 0.5)
+            
+            bg_theme = data.get('bg_theme', 'light')
+            bg_color = data.get('bg_color')
+            bg_image_url = data.get('bg_image_url')
+            text_color = data.get('text_color')
+            cover_text_position = data.get('cover_text_position', 'bottom-center')
+            cover_title = data.get('cover_title')
+            cover_font_size = data.get('cover_font_size', 36)
+            
+            bg_image_data = data.get('bg_image_data')
+            if bg_image_data:
+                import base64
+                import uuid
+                img_bytes = base64.b64decode(bg_image_data)
+                ext = data.get('bg_image_ext', 'jpg')
+                s3_key = f"gallery-bg/{folder_id}/{uuid.uuid4().hex}.{ext}"
+                poehali_s3 = boto3.client('s3',
+                    endpoint_url='https://bucket.poehali.dev',
+                    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'))
+                content_types = {'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'webp': 'image/webp'}
+                poehali_s3.put_object(
+                    Bucket='files', Key=s3_key, Body=img_bytes,
+                    ContentType=content_types.get(ext, 'image/jpeg'))
+                bg_image_url = f"https://cdn.poehali.dev/projects/{os.environ.get('AWS_ACCESS_KEY_ID')}/bucket/{s3_key}"
+            
+            if not folder_id or not user_id:
+                cur.close()
+                conn.close()
+                return {
+                    'statusCode': 400,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'folder_id and user_id required'})
+                }
+            
+            cur.execute(
+                """
+                SELECT id FROM t_p28211681_photo_secure_web.photo_folders
+                WHERE id = %s AND user_id = %s
+                """,
+                (folder_id, user_id)
+            )
+            
+            if not cur.fetchone():
+                cur.close()
+                conn.close()
+                return {
+                    'statusCode': 403,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'Folder not found or access denied'})
+                }
+            
+            # Проверяем, есть ли уже ссылка для этой папки
+            cur.execute(
+                """
+                SELECT short_code FROM t_p28211681_photo_secure_web.folder_short_links
+                WHERE folder_id = %s AND user_id = %s
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (folder_id, user_id)
+            )
+            existing_link = cur.fetchone()
+            
+            expires_at = datetime.now() + timedelta(days=expires_days) if expires_days else None
+            
+            password_hash = None
+            if password:
+                import hashlib
+                password_hash = hashlib.sha256(password.encode()).hexdigest()
+            
+            if existing_link:
+                # Обновляем существующую ссылку
+                short_code = existing_link[0]
+                cur.execute(
+                    """
+                    UPDATE t_p28211681_photo_secure_web.folder_short_links
+                    SET expires_at = %s, password_hash = %s, download_disabled = %s,
+                        watermark_enabled = %s, watermark_type = %s, watermark_text = %s,
+                        watermark_image_url = %s, watermark_frequency = %s, watermark_size = %s,
+                        watermark_opacity = %s, watermark_rotation = %s, screenshot_protection = %s,
+                        favorite_config = %s,
+                        cover_photo_id = %s, cover_orientation = %s,
+                        cover_focus_x = %s, cover_focus_y = %s, grid_gap = %s,
+                        bg_theme = %s, bg_color = %s, bg_image_url = %s, text_color = %s,
+                        cover_text_position = %s,
+                        cover_title = %s, cover_font_size = %s,
+                        mobile_cover_photo_id = %s, mobile_cover_focus_x = %s, mobile_cover_focus_y = %s,
+                        client_upload_enabled = %s, client_folders_visibility = %s
+                    WHERE short_code = %s
+                    """,
+                    (expires_at, password_hash, download_disabled,
+                     watermark_enabled, watermark_type, watermark_text,
+                     watermark_image_url, watermark_frequency, watermark_size,
+                     watermark_opacity, watermark_rotation, screenshot_protection,
+                     json.dumps(favorite_config) if favorite_config else None,
+                     cover_photo_id, cover_orientation,
+                     cover_focus_x, cover_focus_y, grid_gap,
+                     bg_theme, bg_color, bg_image_url, text_color, cover_text_position,
+                     cover_title, cover_font_size,
+                     mobile_cover_photo_id, mobile_cover_focus_x, mobile_cover_focus_y,
+                     client_upload_enabled, client_folders_visibility, short_code)
+                )
+            else:
+                # Создаём новую ссылку
+                short_code = generate_short_code()
+                cur.execute(
+                    """
+                    INSERT INTO t_p28211681_photo_secure_web.folder_short_links
+                    (short_code, folder_id, user_id, expires_at, password_hash, download_disabled,
+                     watermark_enabled, watermark_type, watermark_text, watermark_image_url,
+                     watermark_frequency, watermark_size, watermark_opacity, watermark_rotation, screenshot_protection, favorite_config,
+                     cover_photo_id, cover_orientation, cover_focus_x, cover_focus_y, grid_gap,
+                     bg_theme, bg_color, bg_image_url, text_color, cover_text_position,
+                     cover_title, cover_font_size,
+                     mobile_cover_photo_id, mobile_cover_focus_x, mobile_cover_focus_y,
+                     client_upload_enabled, client_folders_visibility)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (short_code, folder_id, user_id, expires_at, password_hash, download_disabled,
+                     watermark_enabled, watermark_type, watermark_text, watermark_image_url,
+                     watermark_frequency, watermark_size, watermark_opacity, watermark_rotation, screenshot_protection,
+                     json.dumps(favorite_config) if favorite_config else None,
+                     cover_photo_id, cover_orientation, cover_focus_x, cover_focus_y, grid_gap,
+                     bg_theme, bg_color, bg_image_url, text_color, cover_text_position,
+                     cover_title, cover_font_size,
+                     mobile_cover_photo_id, mobile_cover_focus_x, mobile_cover_focus_y,
+                     client_upload_enabled, client_folders_visibility)
+                )
+            conn.commit()
+            
+            cur.close()
+            conn.close()
+            
+            base_url = os.environ.get('SITE_URL', 'http://localhost:5173')
+            share_url = f"{base_url}/g/{short_code}"
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({
+                    'short_code': short_code,
+                    'share_url': share_url,
+                    'expires_at': expires_at.isoformat() if expires_at else None
+                })
+            }
+        
+        elif method == 'GET':
+            short_code = event.get('queryStringParameters', {}).get('code')
+            subfolder_id = event.get('queryStringParameters', {}).get('subfolder_id')
+            subfolder_password = event.get('queryStringParameters', {}).get('subfolder_password', '')
+            
+            if not short_code:
+                cur.close()
+                conn.close()
+                return {
+                    'statusCode': 400,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'Code required'})
+                }
+            
+            cur.execute(
+                """
+                SELECT fsl.folder_id, fsl.expires_at, pf.folder_name, fsl.password_hash, fsl.download_disabled,
+                       fsl.watermark_enabled, fsl.watermark_type, fsl.watermark_text, fsl.watermark_image_url,
+                       fsl.watermark_frequency, fsl.watermark_size, fsl.watermark_opacity, fsl.watermark_rotation, fsl.screenshot_protection,
+                       fsl.favorite_config, fsl.user_id,
+                       fsl.cover_photo_id, fsl.cover_orientation, fsl.cover_focus_x, fsl.cover_focus_y, fsl.grid_gap,
+                       fsl.bg_theme, fsl.bg_color, fsl.bg_image_url, fsl.text_color, fsl.cover_text_position,
+                       fsl.cover_title, fsl.cover_font_size,
+                       fsl.mobile_cover_photo_id, fsl.mobile_cover_focus_x, fsl.mobile_cover_focus_y,
+                       COALESCE(fsl.is_blocked, FALSE) as is_blocked,
+                       COALESCE(fsl.client_upload_enabled, FALSE) as client_upload_enabled,
+                       fsl.id as link_id,
+                       COALESCE(fsl.client_folders_visibility, FALSE) as client_folders_visibility
+                FROM t_p28211681_photo_secure_web.folder_short_links fsl
+                JOIN t_p28211681_photo_secure_web.photo_folders pf ON pf.id = fsl.folder_id
+                WHERE fsl.short_code = %s
+                """,
+                (short_code,)
+            )
+            
+            result = cur.fetchone()
+            if not result:
+                cur.close()
+                conn.close()
+                return {
+                    'statusCode': 404,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'Gallery not found'})
+                }
+            
+            is_blocked = result[31]
+            photographer_id_for_check = result[15]
+            
+            cur.execute(
+                "SELECT is_blocked, email FROM t_p28211681_photo_secure_web.users WHERE id = %s",
+                (photographer_id_for_check,)
+            )
+            user_check = cur.fetchone()
+            user_is_blocked = user_check[0] if user_check else False
+            photographer_email_check = user_check[1] if user_check else None
+            
+            if is_blocked or user_is_blocked:
+                cur.close()
+                conn.close()
+                return {
+                    'statusCode': 403,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({
+                        'error': 'Gallery link blocked',
+                        'blocked': True,
+                        'photographer_email': photographer_email_check
+                    })
+                }
+            
+            (folder_id, expires_at, folder_name, password_hash, download_disabled,
+             watermark_enabled, watermark_type, watermark_text, watermark_image_url,
+             watermark_frequency, watermark_size, watermark_opacity, watermark_rotation, screenshot_protection,
+             favorite_config_json, photographer_id,
+             cover_photo_id, cover_orientation, cover_focus_x, cover_focus_y, grid_gap,
+             bg_theme, bg_color, bg_image_url, text_color, cover_text_position,
+             cover_title, cover_font_size,
+             mobile_cover_photo_id, mobile_cover_focus_x, mobile_cover_focus_y,
+             _is_blocked, client_upload_enabled, link_id, client_folders_visibility) = result
+            
+            if password_hash:
+                provided_password = event.get('queryStringParameters', {}).get('password', '')
+                print(f'[PASSWORD_CHECK] Provided: {provided_password}, Hash stored: {password_hash[:16]}...')
+                import hashlib
+                provided_hash = hashlib.sha256(provided_password.encode()).hexdigest()
+                print(f'[PASSWORD_CHECK] Provided hash: {provided_hash[:16]}..., Expected: {password_hash[:16]}...')
+                if provided_hash != password_hash:
+                    print(f'[PASSWORD_CHECK] Password mismatch!')
+                    cur.close()
+                    conn.close()
+                    return {
+                        'statusCode': 401,
+                        'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                        'body': json.dumps({'error': 'Invalid password', 'requires_password': True})
+                    }
+                print(f'[PASSWORD_CHECK] Password correct!')
+            
+            if expires_at and datetime.now() > expires_at:
+                cur.close()
+                conn.close()
+                return {
+                    'statusCode': 410,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({
+                        'error': 'Gallery link expired',
+                        'expired': True,
+                        'photographer_email': photographer_email_check
+                    })
+                }
+            
+            cur.execute(
+                """
+                UPDATE t_p28211681_photo_secure_web.folder_short_links
+                SET access_count = access_count + 1
+                WHERE short_code = %s
+                """,
+                (short_code,)
+            )
+            conn.commit()
+            
+            if subfolder_id:
+                cur.execute(
+                    """
+                    SELECT id, folder_name, password_hash, COALESCE(is_hidden, FALSE) as is_hidden
+                    FROM t_p28211681_photo_secure_web.photo_folders
+                    WHERE id = %s AND parent_folder_id = %s AND is_trashed = false
+                      AND folder_type = 'originals'
+                    """,
+                    (subfolder_id, folder_id)
+                )
+                sf = cur.fetchone()
+                if not sf:
+                    cur.close()
+                    conn.close()
+                    return {
+                        'statusCode': 404,
+                        'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                        'body': json.dumps({'error': 'Subfolder not found'})
+                    }
+                
+                sf_id, sf_name, sf_password_hash, sf_is_hidden = sf
+                
+                if sf_is_hidden:
+                    cur.close()
+                    conn.close()
+                    return {
+                        'statusCode': 403,
+                        'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                        'body': json.dumps({'error': 'Subfolder is hidden'})
+                    }
+                
+                if sf_password_hash:
+                    import hashlib
+                    provided_hash = hashlib.sha256(subfolder_password.encode()).hexdigest() if subfolder_password else ''
+                    if provided_hash != sf_password_hash:
+                        cur.close()
+                        conn.close()
+                        return {
+                            'statusCode': 401,
+                            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                            'body': json.dumps({'error': 'Invalid subfolder password', 'requires_password': True})
+                        }
+                
+                cur.execute(
+                    """
+                    SELECT id, file_name, s3_key, s3_url, thumbnail_s3_key, thumbnail_s3_url, grid_thumbnail_s3_key, grid_thumbnail_s3_url, width, height, file_size, is_raw, is_video, content_type
+                    FROM t_p28211681_photo_secure_web.photo_bank
+                    WHERE folder_id = %s AND is_trashed = false
+                      AND (is_raw = false OR (is_raw = true AND thumbnail_s3_key IS NOT NULL))
+                    ORDER BY created_at DESC
+                    """,
+                    (subfolder_id,)
+                )
+                sf_photos = cur.fetchall()
+                
+                yc_s3 = boto3.client('s3',
+                    endpoint_url='https://storage.yandexcloud.net',
+                    region_name='ru-central1',
+                    aws_access_key_id=os.environ.get('YC_S3_KEY_ID'),
+                    aws_secret_access_key=os.environ.get('YC_S3_SECRET'),
+                    config=Config(signature_version='s3v4')
+                )
+                poehali_s3 = boto3.client('s3',
+                    endpoint_url='https://bucket.poehali.dev',
+                    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY')
+                )
+                yc_bucket = 'foto-mix'
+                poehali_bucket = 'files'
+                
+                sf_photos_data = []
+                for photo in sf_photos:
+                    try:
+                        photo_id, file_name_p, s3_key, s3_url, thumbnail_s3_key, thumbnail_s3_url, grid_thumbnail_s3_key, grid_thumbnail_s3_url, width_p, height_p, file_size_p, is_raw, is_video, content_type_p = photo
+                        use_poehali_s3 = s3_url and 'cdn.poehali.dev' in s3_url
+                        s3_client = poehali_s3 if use_poehali_s3 else yc_s3
+                        bucket = poehali_bucket if use_poehali_s3 else yc_bucket
+                        expires_in = 43200 if is_video else 3600
+                        
+                        if use_poehali_s3 and s3_url:
+                            photo_url = s3_url
+                            thumbnail_url_p = thumbnail_s3_url if thumbnail_s3_url else None
+                            grid_url = grid_thumbnail_s3_url if grid_thumbnail_s3_url else thumbnail_url_p
+                        else:
+                            if is_raw and thumbnail_s3_key:
+                                photo_url = s3_client.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': thumbnail_s3_key}, ExpiresIn=expires_in)
+                                thumbnail_url_p = photo_url
+                                grid_url = photo_url
+                            else:
+                                photo_url = s3_client.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': s3_key}, ExpiresIn=expires_in)
+                                thumbnail_url_p = None
+                                grid_url = None
+                                if thumbnail_s3_key:
+                                    thumbnail_url_p = s3_client.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': thumbnail_s3_key}, ExpiresIn=3600)
+                                if grid_thumbnail_s3_key:
+                                    grid_url = s3_client.generate_presigned_url('get_object', Params={'Bucket': bucket, 'Key': grid_thumbnail_s3_key}, ExpiresIn=3600)
+                                if not grid_url:
+                                    grid_url = thumbnail_url_p
+                        
+                        sf_photos_data.append({
+                            'id': photo_id, 'file_name': file_name_p, 'photo_url': photo_url,
+                            'thumbnail_url': thumbnail_url_p, 'grid_thumbnail_url': grid_url,
+                            'width': width_p, 'height': height_p, 'file_size': file_size_p,
+                            'is_video': is_video, 'content_type': content_type_p, 's3_key': s3_key,
+                            'folder_id': int(subfolder_id)
+                        })
+                    except Exception as e:
+                        print(f'[GALLERY_SUBFOLDER] Error: {str(e)}')
+                        continue
+                
+                cur.close()
+                conn.close()
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({
+                        'folder_name': sf_name,
+                        'photos': sf_photos_data,
+                        'total_size': sum(p.get('file_size', 0) or 0 for p in sf_photos_data),
+                        'download_disabled': download_disabled,
+                        'watermark': {
+                            'enabled': watermark_enabled, 'type': watermark_type, 'text': watermark_text,
+                            'image_url': watermark_image_url, 'frequency': watermark_frequency,
+                            'size': watermark_size, 'opacity': watermark_opacity, 'rotation': watermark_rotation
+                        },
+                        'screenshot_protection': screenshot_protection
+                    })
+                }
+            
+            cur.execute(
+                """
+                SELECT id, file_name, s3_key, s3_url, thumbnail_s3_key, thumbnail_s3_url, grid_thumbnail_s3_key, grid_thumbnail_s3_url, width, height, file_size, is_raw, is_video, content_type
+                FROM t_p28211681_photo_secure_web.photo_bank
+                WHERE folder_id = %s AND is_trashed = false
+                  AND (is_raw = false OR (is_raw = true AND thumbnail_s3_key IS NOT NULL))
+                ORDER BY created_at DESC
+                """,
+                (folder_id,)
+            )
+            
+            photos = cur.fetchall()
+            
+            yc_s3 = boto3.client('s3',
+                endpoint_url='https://storage.yandexcloud.net',
+                region_name='ru-central1',
+                aws_access_key_id=os.environ.get('YC_S3_KEY_ID'),
+                aws_secret_access_key=os.environ.get('YC_S3_SECRET'),
+                config=Config(signature_version='s3v4')
+            )
+            
+            poehali_s3 = boto3.client('s3',
+                endpoint_url='https://bucket.poehali.dev',
+                aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY')
+            )
+            
+            yc_bucket = 'foto-mix'
+            poehali_bucket = 'files'
+            photos_data = []
+            total_size = 0
+            
+            print(f'[GALLERY] Found {len(photos)} photos (including RAW with previews)')
+            
+            for photo in photos:
+                try:
+                    photo_id, file_name, s3_key, s3_url, thumbnail_s3_key, thumbnail_s3_url, grid_thumbnail_s3_key, grid_thumbnail_s3_url, width, height, file_size, is_raw, is_video, content_type = photo
+                    
+                    # Определяем, какой S3 используется по s3_url
+                    use_poehali_s3 = s3_url and 'cdn.poehali.dev' in s3_url
+                    s3_client = poehali_s3 if use_poehali_s3 else yc_s3
+                    bucket = poehali_bucket if use_poehali_s3 else yc_bucket
+                    
+                    print(f'[GALLERY] Photo {photo_id}: using {"poehali" if use_poehali_s3 else "yandex"} S3, s3_url={s3_url[:50] if s3_url else "none"}...')
+                    
+                    # Для видео используем больший срок действия URL (12 часов)
+                    expires_in = 43200 if is_video else 3600
+                    
+                    # Если в БД уже есть CDN URL от poehali.dev - используем его напрямую
+                    if use_poehali_s3 and s3_url:
+                        photo_url = s3_url
+                        thumbnail_url = thumbnail_s3_url if thumbnail_s3_url else None
+                        grid_url = grid_thumbnail_s3_url if grid_thumbnail_s3_url else thumbnail_url
+                        print(f'[GALLERY] Using stored CDN URLs for photo {photo_id}')
+                    else:
+                        # Генерируем presigned URLs для Yandex S3
+                        if is_raw and thumbnail_s3_key:
+                            photo_url = s3_client.generate_presigned_url(
+                                'get_object',
+                                Params={'Bucket': bucket, 'Key': thumbnail_s3_key},
+                                ExpiresIn=expires_in
+                            )
+                            thumbnail_url = photo_url
+                            grid_url = photo_url
+                        else:
+                            photo_url = s3_client.generate_presigned_url(
+                                'get_object',
+                                Params={'Bucket': bucket, 'Key': s3_key},
+                                ExpiresIn=expires_in
+                            )
+                            thumbnail_url = None
+                            grid_url = None
+                            if thumbnail_s3_key:
+                                thumbnail_url = s3_client.generate_presigned_url(
+                                    'get_object',
+                                    Params={'Bucket': bucket, 'Key': thumbnail_s3_key},
+                                    ExpiresIn=3600
+                                )
+                            if grid_thumbnail_s3_key:
+                                grid_url = s3_client.generate_presigned_url(
+                                    'get_object',
+                                    Params={'Bucket': bucket, 'Key': grid_thumbnail_s3_key},
+                                    ExpiresIn=3600
+                                )
+                            if not grid_url:
+                                grid_url = thumbnail_url
+
+                    photos_data.append({
+                        'id': photo_id,
+                        'file_name': file_name,
+                        'photo_url': photo_url,
+                        'thumbnail_url': thumbnail_url,
+                        'grid_thumbnail_url': grid_url,
+                        'width': width,
+                        'height': height,
+                        'file_size': file_size,
+                        'is_video': is_video,
+                        'content_type': content_type,
+                        's3_key': s3_key,
+                        'folder_id': folder_id
+                    })
+                    
+                    total_size += file_size or 0
+                except Exception as e:
+                    print(f'[GALLERY] Error processing photo, error: {str(e)}')
+                    continue
+            
+            cur.execute(
+                """
+                UPDATE t_p28211681_photo_secure_web.folder_short_links
+                SET view_count = view_count + 1
+                WHERE short_code = %s
+                """,
+                (short_code,)
+            )
+            conn.commit()
+            
+            cur.execute(
+                """
+                SELECT region FROM t_p28211681_photo_secure_web.users WHERE id = %s
+                """,
+                (photographer_id,)
+            )
+            user_row = cur.fetchone()
+            photographer_timezone = get_timezone_for_region(user_row[0] if user_row else None)
+            
+            client_id_param = event.get('queryStringParameters', {}).get('client_id', '')
+            try:
+                client_id_int = int(client_id_param) if client_id_param else None
+            except (ValueError, TypeError):
+                client_id_int = None
+            
+            client_folders_data = []
+            # Показываем папки независимо от client_upload_enabled — папки могли быть загружены ранее
+            # client_upload_enabled влияет только на возможность создавать новые папки
+            if client_folders_visibility:
+                # Включена видимость чужих папок:
+                # Показываем все папки всем, своя помечается is_own=True
+                cur.execute(
+                    """
+                    SELECT id, folder_name, client_name, photo_count, created_at, client_id
+                    FROM t_p28211681_photo_secure_web.client_upload_folders
+                    WHERE parent_folder_id = %s AND short_link_id = %s
+                    ORDER BY CASE WHEN client_id = %s THEN 0 ELSE 1 END, created_at DESC
+                    """,
+                    (folder_id, link_id, client_id_int)
+                )
+                for row in cur.fetchall():
+                    client_folders_data.append({
+                        'id': row[0],
+                        'folder_name': row[1],
+                        'client_name': row[2],
+                        'photo_count': row[3],
+                        'created_at': row[4].isoformat() if row[4] else None,
+                        'is_own': client_id_int is not None and row[5] == client_id_int
+                    })
+            elif client_id_int:
+                # Видимость чужих папок выключена — только своя папка этого клиента
+                cur.execute(
+                    """
+                    SELECT id, folder_name, client_name, photo_count, created_at, client_id
+                    FROM t_p28211681_photo_secure_web.client_upload_folders
+                    WHERE parent_folder_id = %s AND short_link_id = %s AND client_id = %s
+                    ORDER BY created_at DESC
+                    """,
+                    (folder_id, link_id, client_id_int)
+                )
+                for row in cur.fetchall():
+                    client_folders_data.append({
+                        'id': row[0],
+                        'folder_name': row[1],
+                        'client_name': row[2],
+                        'photo_count': row[3],
+                        'created_at': row[4].isoformat() if row[4] else None,
+                        'is_own': True
+                    })
+            
+            subfolders_data = []
+            print(f'[GALLERY] Querying subfolders for folder_id={folder_id}')
+            cur.execute(
+                """
+                SELECT pf.id, pf.folder_name, pf.password_hash IS NOT NULL as has_password,
+                       COALESCE(pf.is_hidden, FALSE) as is_hidden,
+                       COALESCE(pf.sort_order, 0) as sort_order,
+                       (SELECT COUNT(*) FROM t_p28211681_photo_secure_web.photo_bank
+                        WHERE folder_id = pf.id AND is_trashed = false) as photo_count
+                FROM t_p28211681_photo_secure_web.photo_folders pf
+                WHERE pf.parent_folder_id = %s AND pf.is_trashed = false
+                  AND pf.folder_type = 'originals'
+                  AND COALESCE(pf.is_hidden, FALSE) = false
+                ORDER BY COALESCE(pf.sort_order, 0) ASC, pf.created_at DESC
+                """,
+                (folder_id,)
+            )
+            for row in cur.fetchall():
+                subfolders_data.append({
+                    'id': row[0],
+                    'folder_name': row[1],
+                    'has_password': row[2],
+                    'photo_count': row[5]
+                })
+            print(f'[GALLERY] Found {len(subfolders_data)} subfolders')
+            
+            cur.close()
+            conn.close()
+            
+            favorite_config = None
+            if favorite_config_json:
+                try:
+                    favorite_config = json.loads(favorite_config_json) if isinstance(favorite_config_json, str) else favorite_config_json
+                except:
+                    favorite_config = None
+            
+            return {
+                'statusCode': 200,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({
+                    'folder_name': folder_name,
+                    'photos': photos_data,
+                    'total_size': total_size,
+                    'download_disabled': download_disabled,
+                    'photographer_id': photographer_id,
+                    'photographer_timezone': photographer_timezone,
+                    'watermark': {
+                        'enabled': watermark_enabled,
+                        'type': watermark_type,
+                        'text': watermark_text,
+                        'image_url': watermark_image_url,
+                        'frequency': watermark_frequency,
+                        'size': watermark_size,
+                        'opacity': watermark_opacity,
+                        'rotation': watermark_rotation
+                    },
+                    'screenshot_protection': screenshot_protection,
+                    'favorite_config': favorite_config,
+                    'cover_photo_id': cover_photo_id,
+                    'cover_orientation': cover_orientation or 'horizontal',
+                    'cover_focus_x': float(cover_focus_x) if cover_focus_x is not None else 0.5,
+                    'cover_focus_y': float(cover_focus_y) if cover_focus_y is not None else 0.5,
+                    'grid_gap': grid_gap if grid_gap is not None else 8,
+                    'bg_theme': bg_theme or 'light',
+                    'bg_color': bg_color,
+                    'bg_image_url': bg_image_url,
+                    'text_color': text_color,
+                    'cover_text_position': cover_text_position or 'bottom-center',
+                    'cover_title': cover_title,
+                    'cover_font_size': cover_font_size if cover_font_size is not None else 36,
+                    'mobile_cover_photo_id': mobile_cover_photo_id,
+                    'mobile_cover_focus_x': float(mobile_cover_focus_x) if mobile_cover_focus_x is not None else 0.5,
+                    'mobile_cover_focus_y': float(mobile_cover_focus_y) if mobile_cover_focus_y is not None else 0.5,
+                    'client_upload_enabled': client_upload_enabled,
+                    'client_upload_folders': client_folders_data,
+                    'client_folders_visibility': client_folders_visibility,
+                    'link_id': link_id,
+                    'subfolders': subfolders_data
+                })
+            }
+        
+        elif method == 'PUT':
+            data = json.loads(event.get('body', '{}'))
+            action = data.get('action')
+            
+            if action == 'update_favorite_config':
+                folder_id = data.get('folder_id')
+                user_id = data.get('user_id') or event.get('headers', {}).get('x-user-id')
+                favorite_config = data.get('favorite_config')
+                
+                if not folder_id or not user_id:
+                    cur.close()
+                    conn.close()
+                    return {
+                        'statusCode': 400,
+                        'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                        'body': json.dumps({'error': 'folder_id and user_id required'})
+                    }
+                
+                cur.execute(
+                    """
+                    UPDATE t_p28211681_photo_secure_web.folder_short_links
+                    SET favorite_config = %s
+                    WHERE folder_id = %s AND user_id = %s
+                    """,
+                    (json.dumps(favorite_config) if favorite_config else None, folder_id, user_id)
+                )
+                conn.commit()
+                
+                cur.close()
+                conn.close()
+                return {
+                    'statusCode': 200,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'success': True})
+                }
+            
+            cur.close()
+            conn.close()
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'error': 'Unknown action'})
+            }
+        
+        else:
+            cur.close()
+            conn.close()
+            return {
+                'statusCode': 405,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'error': 'Method not allowed'})
+            }
+    
+    except psycopg2.Error as e:
+        return {
+            'statusCode': 404 if 'not found' in str(e).lower() else 500,
+            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+            'body': json.dumps({'error': 'Gallery not found' if 'not found' in str(e).lower() else str(e)})
+        }
+    except Exception as e:
+        return {
+            'statusCode': 500,
+            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+            'body': json.dumps({'error': str(e)})
+        }

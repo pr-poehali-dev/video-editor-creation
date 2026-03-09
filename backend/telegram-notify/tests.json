@@ -1,0 +1,44 @@
+{
+  "tests": [
+    {
+      "name": "Send booking notification",
+      "method": "POST",
+      "path": "/?action=send_booking",
+      "body": {
+        "client_id": 161,
+        "photographer_id": 22,
+        "booking_id": 31,
+        "booking_date": "2026-02-10",
+        "booking_time": "14:00",
+        "location": "Парк Горького"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "success": true,
+        "status": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get message status",
+      "method": "GET",
+      "path": "/?action=status&booking_id=31",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "status": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Send direct - missing params",
+      "method": "POST",
+      "path": "/?action=send_direct",
+      "body": {},
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "string"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

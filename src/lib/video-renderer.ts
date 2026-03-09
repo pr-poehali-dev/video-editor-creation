@@ -1032,7 +1032,7 @@ export class VideoRenderer {
   }
 
   private async fetchChunked(serverId: number, label: string, onProgress?: (p: number) => void): Promise<ArrayBuffer> {
-    const CHUNK_SIZE = Math.floor(1.5 * 1024 * 1024);
+    const CHUNK_SIZE = 400 * 1024;
     const infoUrl = mediaApi.proxyInfoUrl(serverId);
     const infoResp = await fetch(infoUrl, { mode: 'cors' });
     if (!infoResp.ok) throw new Error(`Info request failed: ${infoResp.status}`);
