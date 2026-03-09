@@ -957,7 +957,7 @@ export class VideoRenderer {
   }
 
   private async fetchAudioBuffer(
-    audioCtx: AudioContext,
+    audioCtx: AudioContext | OfflineAudioContext,
     assetId: string,
     asset: { url: string; name: string },
     label = 'Render',
@@ -967,73 +967,46 @@ export class VideoRenderer {
 
     onProgress?.(0.05);
 
-    if (!isNaN(serverId)) {
-      try {
-        const proxyUrl = mediaApi.proxyUrl(serverId);
-        console.log(`[${label}] Trying direct proxy for: ${asset.name}`);
-        onProgress?.(0.1);
-        const resp = await fetch(proxyUrl, { mode: 'cors' });
-        if (resp.ok) {
-          onProgress?.(0.5);
-          const arrayBuffer = await resp.arrayBuffer();
-          if (arrayBuffer.byteLength > 0) {
-            onProgress?.(0.8);
-            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            onProgress?.(1);
-            console.log(`[${label}] Audio loaded (direct): ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, size=${(arrayBuffer.byteLength/1024/1024).toFixed(1)}MB`);
-            return audioBuffer;
-          }
-        }
-        if (resp.status === 502 || resp.status === 413) {
-          console.log(`[${label}] Direct proxy returned ${resp.status}, switching to chunked download: ${asset.name}`);
-          onProgress?.(0.15);
-          const arrayBuffer = await this.fetchChunked(serverId, label, onProgress);
-          if (arrayBuffer.byteLength > 0) {
-            onProgress?.(0.85);
-            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            onProgress?.(1);
-            console.log(`[${label}] Audio loaded (chunked): ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, size=${(arrayBuffer.byteLength/1024/1024).toFixed(1)}MB`);
-            return audioBuffer;
-          }
-        }
-        console.warn(`[${label}] Proxy failed with status ${resp.status}: ${asset.name}`);
-      } catch (err) {
-        console.warn(`[${label}] Proxy error for ${asset.name}:`, err);
-        try {
-          console.log(`[${label}] Falling back to chunked download: ${asset.name}`);
-          onProgress?.(0.15);
-          const arrayBuffer = await this.fetchChunked(serverId, label, onProgress);
-          if (arrayBuffer.byteLength > 0) {
-            onProgress?.(0.85);
-            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            onProgress?.(1);
-            console.log(`[${label}] Audio loaded (chunked fallback): ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s`);
-            return audioBuffer;
-          }
-        } catch (chunkErr) {
-          console.warn(`[${label}] Chunked fallback also failed: ${asset.name}`, chunkErr);
-        }
-      }
-    }
-
     if (asset.url && asset.url.startsWith('http')) {
       try {
-        console.log(`[${label}] Trying CDN URL: ${asset.name}`);
-        onProgress?.(0.3);
+        console.log(`[${label}] Trying CDN URL first: ${asset.name}, url=${asset.url.substring(0, 80)}`);
+        onProgress?.(0.1);
         const resp = await fetch(asset.url, { mode: 'cors' });
         if (resp.ok) {
-          onProgress?.(0.7);
+          const contentLength = parseInt(resp.headers.get('content-length') || '0', 10);
+          console.log(`[${label}] CDN response OK, content-length=${contentLength}`);
+          onProgress?.(0.4);
           const arrayBuffer = await resp.arrayBuffer();
           if (arrayBuffer.byteLength > 0) {
-            onProgress?.(0.9);
+            onProgress?.(0.7);
+            console.log(`[${label}] CDN downloaded ${(arrayBuffer.byteLength/1024/1024).toFixed(1)}MB, decoding...`);
             const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
             onProgress?.(1);
-            console.log(`[${label}] Audio loaded (CDN): ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s`);
+            console.log(`[${label}] Audio loaded (CDN): ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, size=${(arrayBuffer.byteLength/1024/1024).toFixed(1)}MB`);
             return audioBuffer;
           }
+        } else {
+          console.warn(`[${label}] CDN returned ${resp.status}: ${asset.name}`);
         }
       } catch (err) {
         console.warn(`[${label}] CDN fetch failed: ${asset.name}`, err);
+      }
+    }
+
+    if (!isNaN(serverId)) {
+      try {
+        console.log(`[${label}] Trying chunked proxy download: ${asset.name}`);
+        onProgress?.(0.15);
+        const arrayBuffer = await this.fetchChunked(serverId, label, onProgress);
+        if (arrayBuffer.byteLength > 0) {
+          onProgress?.(0.85);
+          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+          onProgress?.(1);
+          console.log(`[${label}] Audio loaded (chunked): ${asset.name}, duration=${audioBuffer.duration.toFixed(1)}s, size=${(arrayBuffer.byteLength/1024/1024).toFixed(1)}MB`);
+          return audioBuffer;
+        }
+      } catch (err) {
+        console.warn(`[${label}] Chunked proxy failed: ${asset.name}`, err);
       }
     }
 
@@ -1042,7 +1015,7 @@ export class VideoRenderer {
   }
 
   private async fetchChunked(serverId: number, label: string, onProgress?: (p: number) => void): Promise<ArrayBuffer> {
-    const CHUNK_SIZE = 3 * 1024 * 1024;
+    const CHUNK_SIZE = 1.5 * 1024 * 1024;
     const infoUrl = mediaApi.proxyInfoUrl(serverId);
     const infoResp = await fetch(infoUrl, { mode: 'cors' });
     if (!infoResp.ok) throw new Error(`Info request failed: ${infoResp.status}`);
@@ -1061,16 +1034,22 @@ export class VideoRenderer {
       const rangeUrl = mediaApi.proxyRangeUrl(serverId, start, end);
 
       let resp: Response | null = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 4; attempt++) {
         try {
           resp = await fetch(rangeUrl, { mode: 'cors' });
           if (resp.ok) break;
+          if (resp.status >= 500 && attempt < 3) {
+            console.warn(`[${label}] Chunk ${i} returned ${resp.status}, retry ${attempt + 1}/3`);
+            await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+            resp = null;
+            continue;
+          }
         } catch {
-          if (attempt < 2) await new Promise(r => setTimeout(r, 1000));
+          if (attempt < 3) await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
         }
       }
 
-      if (!resp || !resp.ok) throw new Error(`Chunk ${i} failed`);
+      if (!resp || !resp.ok) throw new Error(`Chunk ${i} failed after retries`);
 
       const buf = await resp.arrayBuffer();
       chunks.push(new Uint8Array(buf));
