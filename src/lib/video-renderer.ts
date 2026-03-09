@@ -1011,9 +1011,29 @@ export class VideoRenderer {
       }
     }
 
+    if (!isNaN(serverId)) {
+      try {
+        console.log(`[${label}] Method 2: Chunked proxy for serverId=${serverId}`);
+        onProgress?.(0.1);
+        const arrayBuffer = await this.fetchChunked(serverId, label, (p) => {
+          onProgress?.(0.1 + p * 0.7);
+        });
+        console.log(`[${label}] Chunked downloaded: ${arrayBuffer.byteLength} bytes`);
+        if (arrayBuffer.byteLength > 0) {
+          onProgress?.(0.85);
+          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+          onProgress?.(1);
+          console.log(`[${label}] === AUDIO OK (chunked proxy): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
+          return audioBuffer;
+        }
+      } catch (err) {
+        console.error(`[${label}] Chunked proxy FAILED:`, err);
+      }
+    }
+
     if (asset.url && asset.url.startsWith('http')) {
       try {
-        console.log(`[${label}] Method 2: Direct CDN URL: ${asset.url.substring(0, 80)}`);
+        console.log(`[${label}] Method 3: Direct CDN URL: ${asset.url.substring(0, 80)}`);
         onProgress?.(0.1);
         const resp = await fetch(asset.url, { mode: 'cors' });
         console.log(`[${label}] CDN response: status=${resp.status}, ok=${resp.ok}`);
