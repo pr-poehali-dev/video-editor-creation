@@ -1001,23 +1001,26 @@ export class VideoRenderer {
     onProgress?.(0.02);
     console.log(`[${label}] === AUDIO LOAD START: "${asset.name}", assetId=${assetId}, serverId=${serverId} ===`);
 
-    if (!isNaN(serverId)) {
+    if (asset.url && asset.url.startsWith('http')) {
       try {
-        console.log(`[${label}] Method 1: Chunked proxy for serverId=${serverId}`);
+        console.log(`[${label}] Method 1: Direct CDN URL: ${asset.url.substring(0, 80)}`);
         onProgress?.(0.1);
-        const arrayBuffer = await this.fetchChunked(serverId, label, (p) => {
-          onProgress?.(0.1 + p * 0.7);
-        });
-        console.log(`[${label}] Chunked downloaded: ${arrayBuffer.byteLength} bytes`);
-        if (arrayBuffer.byteLength > 0) {
-          onProgress?.(0.85);
-          const audioBuffer = await this.safeDecodeAudio(audioCtx, arrayBuffer, label);
-          onProgress?.(1);
-          console.log(`[${label}] === AUDIO OK (chunked proxy): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
-          return audioBuffer;
+        const resp = await fetch(asset.url, { mode: 'cors' });
+        console.log(`[${label}] CDN response: status=${resp.status}, ok=${resp.ok}`);
+        if (resp.ok) {
+          onProgress?.(0.4);
+          const arrayBuffer = await resp.arrayBuffer();
+          console.log(`[${label}] CDN downloaded: ${arrayBuffer.byteLength} bytes`);
+          if (arrayBuffer.byteLength > 0) {
+            onProgress?.(0.8);
+            const audioBuffer = await this.safeDecodeAudio(audioCtx, arrayBuffer, label);
+            onProgress?.(1);
+            console.log(`[${label}] === AUDIO OK (CDN): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
+            return audioBuffer;
+          }
         }
       } catch (err) {
-        console.error(`[${label}] Chunked proxy FAILED:`, err);
+        console.warn(`[${label}] CDN fetch failed, will try proxy:`, err);
       }
     }
 
@@ -1038,36 +1041,33 @@ export class VideoRenderer {
               onProgress?.(0.85);
               const audioBuffer = await this.safeDecodeAudio(audioCtx, arrayBuffer, label);
               onProgress?.(1);
-              console.log(`[${label}] === AUDIO OK (presigned): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s, channels=${audioBuffer.numberOfChannels} ===`);
+              console.log(`[${label}] === AUDIO OK (presigned): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
               return audioBuffer;
             }
           }
         }
       } catch (err) {
-        console.error(`[${label}] Presigned URL FAILED:`, err);
+        console.warn(`[${label}] Presigned URL failed, will try chunked proxy:`, err);
       }
     }
 
-    if (asset.url && asset.url.startsWith('http')) {
+    if (!isNaN(serverId)) {
       try {
-        console.log(`[${label}] Method 3: Direct CDN URL: ${asset.url.substring(0, 80)}`);
+        console.log(`[${label}] Method 3: Chunked proxy for serverId=${serverId}`);
         onProgress?.(0.1);
-        const resp = await fetch(asset.url, { mode: 'cors' });
-        console.log(`[${label}] CDN response: status=${resp.status}, ok=${resp.ok}`);
-        if (resp.ok) {
-          onProgress?.(0.4);
-          const arrayBuffer = await resp.arrayBuffer();
-          console.log(`[${label}] CDN downloaded: ${arrayBuffer.byteLength} bytes`);
-          if (arrayBuffer.byteLength > 0) {
-            onProgress?.(0.8);
-            const audioBuffer = await this.safeDecodeAudio(audioCtx, arrayBuffer, label);
-            onProgress?.(1);
-            console.log(`[${label}] === AUDIO OK (CDN): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
-            return audioBuffer;
-          }
+        const arrayBuffer = await this.fetchChunked(serverId, label, (p) => {
+          onProgress?.(0.1 + p * 0.7);
+        });
+        console.log(`[${label}] Chunked downloaded: ${arrayBuffer.byteLength} bytes`);
+        if (arrayBuffer.byteLength > 0) {
+          onProgress?.(0.85);
+          const audioBuffer = await this.safeDecodeAudio(audioCtx, arrayBuffer, label);
+          onProgress?.(1);
+          console.log(`[${label}] === AUDIO OK (chunked proxy): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
+          return audioBuffer;
         }
       } catch (err) {
-        console.error(`[${label}] CDN fetch FAILED (likely CORS):`, err);
+        console.error(`[${label}] Chunked proxy FAILED:`, err);
       }
     }
 
