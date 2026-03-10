@@ -10,6 +10,17 @@ import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 
 type ProgressCallback = (progress: number, stage: string) => void;
 
+export interface AssetLoadDetail {
+  id: string;
+  name: string;
+  type: 'image' | 'audio' | 'video';
+  status: 'loading' | 'done' | 'error';
+  progress: number;
+  error?: string;
+}
+
+export type AssetDetailCallback = (details: AssetLoadDetail[]) => void;
+
 interface RenderResult {
   blob: Blob;
   url: string;
@@ -76,6 +87,8 @@ export class VideoRenderer {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
   private cancelled = false;
+  private assetDetails: AssetLoadDetail[] = [];
+  private onAssetDetail?: AssetDetailCallback;
 
   async init(): Promise<void> {
     this.cancelled = false;
@@ -85,7 +98,8 @@ export class VideoRenderer {
     tracks: Track[],
     assets: MediaAsset[],
     exportSettings: ExportSettings,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
+    onAssetDetail?: AssetDetailCallback
   ): Promise<RenderResult> {
     this.cancelled = false;
 
@@ -128,6 +142,22 @@ export class VideoRenderer {
     for (const c of clips) {
       if (c.assetId) assetsToLoad.add(c.assetId);
     }
+
+    const assetDetails: AssetLoadDetail[] = [];
+    for (const aid of assetsToLoad) {
+      const a = assetMap.get(aid);
+      if (!a) continue;
+      assetDetails.push({
+        id: aid,
+        name: a.name,
+        type: a.type as 'image' | 'audio' | 'video',
+        status: 'loading',
+        progress: 0,
+      });
+    }
+    this.assetDetails = assetDetails;
+    this.onAssetDetail = onAssetDetail;
+    onAssetDetail?.([...assetDetails]);
 
     for (const assetId of assetsToLoad) {
       if (this.cancelled) throw new Error("Отменено");
@@ -173,9 +203,27 @@ export class VideoRenderer {
         if (!loaded) {
           console.error(`[Render] ALL METHODS FAILED for image: ${asset.name}`);
         }
+
+        const detail = assetDetails.find(d => d.id === assetId);
+        if (detail) {
+          if (loaded) {
+            detail.status = 'done';
+            detail.progress = 100;
+          } else {
+            detail.status = 'error';
+            detail.error = `Не удалось загрузить изображение: ${asset.name}`;
+          }
+          onAssetDetail?.([...assetDetails]);
+        }
       }
 
       loadedCount++;
+    }
+
+    const failedImages = assetDetails.filter(d => d.status === 'error' && (d.type === 'image' || d.type === 'video'));
+    if (failedImages.length > 0) {
+      onAssetDetail?.([...assetDetails]);
+      throw new Error(`Не удалось загрузить ${failedImages.length} изображений: ${failedImages.map(d => d.name).join(', ')}`);
     }
 
     report(0.2, "Подготовка аудио");
@@ -187,10 +235,22 @@ export class VideoRenderer {
     });
 
     console.log(`[Render] Total clips: ${clips.length}, audio clips: ${audioClips.length}`);
+    const trackedAudioIds = new Set<string>();
     for (const ac of audioClips) {
       const asset = ac.assetId ? assetMap.get(ac.assetId) : null;
       console.log(`[Render] Audio clip: "${ac.name}", assetId=${ac.assetId}, type=${asset?.type}, url=${asset?.url?.substring(0, 60)}, vol=${ac.volume}, muted=${ac.trackMuted}, offset=${ac.offset}`);
+      if (ac.assetId && asset && !trackedAudioIds.has(ac.assetId) && !assetDetails.find(d => d.id === ac.assetId)) {
+        trackedAudioIds.add(ac.assetId);
+        assetDetails.push({
+          id: ac.assetId,
+          name: asset.name,
+          type: 'audio',
+          status: 'loading',
+          progress: 0,
+        });
+      }
     }
+    onAssetDetail?.([...assetDetails]);
 
     const bitrate = exportSettings.bitrate > 0 ? exportSettings.bitrate * 1000 : quality.bitrate;
 
@@ -376,6 +436,12 @@ export class VideoRenderer {
     }
 
     await tempAudioCtx.close();
+
+    const failedAudio = this.assetDetails.filter(d => d.status === 'error' && d.type === 'audio');
+    if (failedAudio.length > 0) {
+      this.onAssetDetail?.([...this.assetDetails]);
+      throw new Error(`Не удалось загрузить ${failedAudio.length} аудио: ${failedAudio.map(d => d.name).join(', ')}`);
+    }
 
     const hasAudio = audioClips.some(ac => ac.assetId && audioBufferMap.has(ac.assetId));
     console.log(`[Render] === AUDIO LOADING COMPLETE: hasAudio=${hasAudio}, buffersLoaded=${audioBufferMap.size}/${totalAudioAssets} ===`);
@@ -802,6 +868,13 @@ export class VideoRenderer {
       }
     }
 
+    const failedAudioWebm = this.assetDetails.filter(d => d.status === 'error' && d.type === 'audio');
+    if (failedAudioWebm.length > 0) {
+      await audioCtx.close();
+      this.onAssetDetail?.([...this.assetDetails]);
+      throw new Error(`Не удалось загрузить ${failedAudioWebm.length} аудио: ${failedAudioWebm.map(d => d.name).join(', ')}`);
+    }
+
     const scheduledSources: AudioBufferSourceNode[] = [];
 
     const stream = canvas.captureStream(fps);
@@ -907,6 +980,16 @@ export class VideoRenderer {
     this.cancelled = true;
     this.canvas = null;
     this.ctx = null;
+  }
+
+  private updateAssetDetail(assetId: string, status: 'loading' | 'done' | 'error', progress: number, error?: string): void {
+    const detail = this.assetDetails.find(d => d.id === assetId);
+    if (detail) {
+      detail.status = status;
+      detail.progress = progress;
+      if (error) detail.error = error;
+      this.onAssetDetail?.([...this.assetDetails]);
+    }
   }
 
   private parseResolution(resolution: string, defaultW: number, defaultH: number): [number, number] {
@@ -1037,6 +1120,7 @@ export class VideoRenderer {
             const audioBuffer = await this.safeDecodeAudio(audioCtx, arrayBuffer, label);
             onProgress?.(1);
             console.log(`[${label}] === AUDIO OK (CDN): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
+            this.updateAssetDetail(assetId, 'done', 100);
             return audioBuffer;
           }
         }
@@ -1074,7 +1158,7 @@ export class VideoRenderer {
           onProgress?.(0.1);
           try {
             const result = await tryUrl(presignResp.cdn_url as string, 'CDN-presign');
-            if (result) { onProgress?.(1); return result; }
+            if (result) { onProgress?.(1); this.updateAssetDetail(assetId, 'done', 100); return result; }
           } catch (e) {
             console.warn(`[${label}] CDN-presign failed:`, e);
           }
@@ -1084,7 +1168,7 @@ export class VideoRenderer {
           onProgress?.(0.3);
           try {
             const result = await tryUrl(presignResp.url as string, 'S3-presigned');
-            if (result) { onProgress?.(1); return result; }
+            if (result) { onProgress?.(1); this.updateAssetDetail(assetId, 'done', 100); return result; }
           } catch (e) {
             console.warn(`[${label}] S3-presigned failed:`, e);
           }
@@ -1107,6 +1191,7 @@ export class VideoRenderer {
           const audioBuffer = await this.safeDecodeAudio(audioCtx, arrayBuffer, label);
           onProgress?.(1);
           console.log(`[${label}] === AUDIO OK (chunked proxy): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
+          this.updateAssetDetail(assetId, 'done', 100);
           return audioBuffer;
         }
       } catch (err) {
@@ -1115,6 +1200,7 @@ export class VideoRenderer {
     }
 
     console.error(`[${label}] === ALL METHODS FAILED: "${asset.name}" — VIDEO WILL HAVE NO AUDIO ===`);
+    this.updateAssetDetail(assetId, 'error', 0, `Не удалось загрузить аудио: ${asset.name}`);
     return null;
   }
 
@@ -1164,6 +1250,11 @@ export class VideoRenderer {
       downloaded += bytes.byteLength;
       const progress = 0.2 + 0.6 * (downloaded / totalSize);
       onProgress?.(progress);
+      const chunkAssetDetail = this.assetDetails.find(d => d.id === `server_${serverId}`);
+      if (chunkAssetDetail) {
+        chunkAssetDetail.progress = Math.round((downloaded / totalSize) * 100);
+        this.onAssetDetail?.([...this.assetDetails]);
+      }
       console.log(`[${label}] Chunk ${i + 1}/${totalChunks}: ${(downloaded / 1024 / 1024).toFixed(1)}/${(totalSize / 1024 / 1024).toFixed(1)}MB`);
 
       if (i < totalChunks - 1) {

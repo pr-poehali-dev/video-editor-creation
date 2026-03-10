@@ -7,6 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
 import type { ExportSettings } from '@/types/editor';
+import type { AssetLoadDetail } from '@/lib/video-renderer';
 
 interface ExportPreset {
   id: string;
@@ -86,6 +87,8 @@ const ExportPanel = () => {
   const [resultFileName, setResultFileName] = useState('');
   const [resultSize, setResultSize] = useState(0);
   const [activePreset, setActivePreset] = useState('social');
+  const [assetDetails, setAssetDetails] = useState<AssetLoadDetail[]>([]);
+  const [showErrorLog, setShowErrorLog] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rendererRef = useRef<any>(null);
 
@@ -108,6 +111,8 @@ const ExportPanel = () => {
     setExportDone(false);
     setExportError('');
     setResultUrl('');
+    setAssetDetails([]);
+    setShowErrorLog(false);
 
     try {
       let VideoRendererClass;
@@ -135,6 +140,9 @@ const ExportPanel = () => {
           if (stage.includes('MP4')) setExportActualFormat('MP4');
           else if (stage.includes('WebM')) setExportActualFormat('WebM');
           else if (stage.includes('GIF')) setExportActualFormat('GIF');
+        },
+        (details) => {
+          setAssetDetails([...details]);
         }
       );
 
@@ -253,34 +261,68 @@ const ExportPanel = () => {
             </div>
           ) : isExporting ? (
             <div className="space-y-3 py-4">
-              <div className="w-14 h-14 mx-auto rounded-full bg-primary/20 flex items-center justify-center">
-                <Icon name="Clapperboard" size={24} className="text-primary animate-pulse" />
-              </div>
               <div className="text-center">
-                <p className="text-sm font-semibold">{exportStage}</p>
-                <p className="text-2xl font-bold mt-1">{exportProgress}%</p>
+                <div className="w-10 h-10 mx-auto rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
+                  <Icon name="Loader2" size={20} className="text-primary animate-spin" />
+                </div>
+                <p className="text-xs font-medium mt-2">{exportStage}</p>
+                {exportActualFormat && (
+                  <p className="text-[10px] text-muted-foreground">Формат: {exportActualFormat}</p>
+                )}
               </div>
-              {exportActualFormat && (
-                <div className="flex items-center justify-center gap-2">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                    exportActualFormat === 'MP4' ? 'bg-emerald-500/20 text-emerald-400' :
-                    exportActualFormat === 'GIF' ? 'bg-purple-500/20 text-purple-400' :
-                    'bg-blue-500/20 text-blue-400'
-                  }`}>
-                    {exportActualFormat}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {exportSettings.resolution} · {exportSettings.fps} FPS
-                  </span>
+
+              <div>
+                <div className="flex justify-between text-[10px] mb-1">
+                  <span>Общий прогресс</span>
+                  <span>{exportProgress}%</span>
+                </div>
+                <Progress value={exportProgress} className="h-2" />
+              </div>
+
+              {assetDetails.length > 0 && (
+                <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+                  <p className="text-[10px] text-muted-foreground font-medium">Загрузка ресурсов:</p>
+                  {assetDetails.map((detail) => (
+                    <div key={detail.id} className="space-y-0.5">
+                      <div className="flex items-center gap-1.5 text-[10px]">
+                        <Icon
+                          name={detail.type === 'audio' ? 'Music' : detail.type === 'video' ? 'Film' : 'Image'}
+                          size={10}
+                          className={
+                            detail.status === 'done' ? 'text-green-400' :
+                            detail.status === 'error' ? 'text-red-400' :
+                            'text-muted-foreground'
+                          }
+                        />
+                        <span className="truncate flex-1" title={detail.name}>
+                          {detail.name}
+                        </span>
+                        <span className={
+                          detail.status === 'done' ? 'text-green-400' :
+                          detail.status === 'error' ? 'text-red-400' :
+                          'text-muted-foreground'
+                        }>
+                          {detail.status === 'done' ? '\u2713' : detail.status === 'error' ? '\u2717' : `${detail.progress}%`}
+                        </span>
+                      </div>
+                      <div className="h-1 rounded-full overflow-hidden" style={{ background: 'hsl(var(--editor-bg))' }}>
+                        <div
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            detail.status === 'done' ? 'bg-green-500' :
+                            detail.status === 'error' ? 'bg-red-500' :
+                            'bg-primary'
+                          }`}
+                          style={{ width: `${detail.progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
-              <Progress value={exportProgress} className="h-2" />
-              <p className="text-[10px] text-muted-foreground text-center">
-                Рендеринг выполняется прямо в браузере
-              </p>
+
               <button
                 onClick={handleCancel}
-                className="nle-button w-full py-2 text-[10px] text-destructive"
+                className="w-full text-[10px] py-1.5 rounded border border-border hover:bg-accent transition-colors"
               >
                 Отменить
               </button>
@@ -288,12 +330,52 @@ const ExportPanel = () => {
           ) : (
             <>
               {exportError && (
-                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-destructive/10 text-destructive text-xs">
-                  <Icon name="AlertCircle" size={14} className="mt-0.5 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium">Ошибка рендеринга</p>
-                    <p className="text-[10px] mt-0.5 opacity-80">{exportError}</p>
+                <div className="space-y-3">
+                  <div className="w-14 h-14 mx-auto rounded-full bg-red-500/20 flex items-center justify-center">
+                    <Icon name="X" size={28} className="text-red-400" />
                   </div>
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-red-400">Ошибка экспорта</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">{exportError}</p>
+                  </div>
+
+                  {assetDetails.some(d => d.status === 'error') && (
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => setShowErrorLog(!showErrorLog)}
+                        className="w-full text-[10px] py-1.5 rounded border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors flex items-center justify-center gap-1"
+                      >
+                        <Icon name={showErrorLog ? 'ChevronUp' : 'ChevronDown'} size={12} />
+                        {showErrorLog ? 'Скрыть подробности' : 'Показать подробности'}
+                      </button>
+
+                      {showErrorLog && (
+                        <div className="rounded border border-red-500/20 p-2 space-y-1 max-h-[200px] overflow-y-auto" style={{ background: 'hsl(var(--editor-bg))' }}>
+                          {assetDetails.filter(d => d.status === 'error').map(d => (
+                            <div key={d.id} className="flex items-start gap-1.5 text-[10px]">
+                              <Icon name="AlertCircle" size={10} className="text-red-400 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <span className="text-red-400 font-medium">{d.name}</span>
+                                <p className="text-muted-foreground">{d.error || 'Неизвестная ошибка'}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setExportError('');
+                      setExportDone(false);
+                      setIsExporting(false);
+                      setExportProgress(0);
+                    }}
+                    className="w-full text-xs py-2 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    Попробовать снова
+                  </button>
                 </div>
               )}
 
