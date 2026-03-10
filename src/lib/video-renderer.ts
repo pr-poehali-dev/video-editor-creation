@@ -140,46 +140,36 @@ export class VideoRenderer {
 
       if (asset.type === "image" || asset.type === "video") {
         let loaded = false;
-        for (const url of urlsToTry) {
+        const isServer = assetId.startsWith("server_");
+        const serverId = isServer ? parseInt(assetId.replace("server_", ""), 10) : NaN;
+
+        // For server assets - always use proxy to avoid CORS
+        if (isServer && !isNaN(serverId)) {
           try {
-            const img = await this.loadImage(url);
+            const img = await this.fetchImageViaProxy(serverId);
             imageCache.set(assetId, img);
             loaded = true;
-            console.log(`[Render] Image loaded: ${asset.name}, url=${url.substring(0, 100)}`);
-            break;
-          } catch {
-            console.warn(`[Render] Image load failed (CORS): ${asset.name}, url=${url.substring(0, 100)}`);
-          }
-          try {
-            const img = await this.loadImageNoCors(url);
-            imageCache.set(assetId, img);
-            loaded = true;
-            console.log(`[Render] Image loaded (no-cors fallback): ${asset.name}`);
-            break;
-          } catch {
-            console.warn(`[Render] Image load failed (no-cors): ${asset.name}`);
-          }
-        }
-        if (!loaded && !isNaN(parseInt(assetId.replace("server_", ""), 10))) {
-          try {
-            const serverId = parseInt(assetId.replace("server_", ""), 10);
-            const presignResp = await mediaApi.presign(serverId);
-            const tryUrls = [presignResp.cdn_url, presignResp.url].filter(Boolean) as string[];
-            for (const u of tryUrls) {
-              try {
-                const img = await this.loadImage(u);
-                imageCache.set(assetId, img);
-                loaded = true;
-                console.log(`[Render] Image loaded via presign: ${asset.name}`);
-                break;
-              } catch {
-                console.warn(`[Render] Presign image failed: ${u.substring(0, 80)}`);
-              }
-            }
+            console.log(`[Render] Image loaded via proxy: ${asset.name}`);
           } catch (e) {
-            console.error(`[Render] Presign request failed for ${asset.name}:`, e);
+            console.warn(`[Render] Proxy image load failed: ${asset.name}`, e);
           }
         }
+
+        // For local/blob URLs - load directly
+        if (!loaded) {
+          for (const url of urlsToTry) {
+            try {
+              const img = await this.loadImage(url);
+              imageCache.set(assetId, img);
+              loaded = true;
+              console.log(`[Render] Image loaded directly: ${asset.name}`);
+              break;
+            } catch {
+              console.warn(`[Render] Image load failed: ${asset.name}, url=${url.substring(0, 80)}`);
+            }
+          }
+        }
+
         if (!loaded) {
           console.error(`[Render] ALL METHODS FAILED for image: ${asset.name}`);
         }
@@ -1129,7 +1119,7 @@ export class VideoRenderer {
   }
 
   private async fetchChunked(serverId: number, label: string, onProgress?: (p: number) => void): Promise<ArrayBuffer> {
-    const CHUNK_SIZE = 100 * 1024;
+    const CHUNK_SIZE = 2 * 1024 * 1024;
     const MAX_RETRIES = 6;
     const infoUrl = mediaApi.proxyInfoUrl(serverId);
     const infoResp = await fetch(infoUrl, { mode: 'cors' });
@@ -1213,13 +1203,16 @@ export class VideoRenderer {
     });
   }
 
-  private loadImageNoCors(url: string): Promise<HTMLImageElement> {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => reject(new Error(`Failed to load (no-cors): ${url}`));
-      img.src = url;
-    });
+  private async fetchImageViaProxy(serverId: number): Promise<HTMLImageElement> {
+    const url = mediaApi.proxyUrl(serverId);
+    const resp = await fetch(url, { mode: 'cors' });
+    if (!resp.ok) throw new Error(`Proxy returned ${resp.status}`);
+    const json = await resp.json();
+    if (!json.data) throw new Error('No data in proxy response');
+    const binary = Uint8Array.from(atob(json.data), c => c.charCodeAt(0));
+    const blob = new Blob([binary], { type: json.mime_type || 'image/png' });
+    const blobUrl = URL.createObjectURL(blob);
+    return this.loadImage(blobUrl);
   }
 
   private drawImageWithTransform(

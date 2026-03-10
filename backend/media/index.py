@@ -414,25 +414,25 @@ def handle_proxy(conn, user, qs):
         if qs.get('info') == '1':
             return ok({'size': file_size or 0, 'mime_type': mime_type})
 
+        MAX_CHUNK = 2 * 1024 * 1024
+
+        obj = s3.get_object(Bucket='files', Key=s3_key)
+        full_data = obj['Body'].read()
+        actual_size = len(full_data)
+
         range_start = qs.get('start')
         range_end = qs.get('end')
 
-        MAX_PROXY_SIZE = 100 * 1024
-
         if range_start is not None and range_end is not None:
             start = int(range_start)
-            end = int(range_end)
-            chunk_size = end - start + 1
-            if chunk_size > MAX_PROXY_SIZE:
-                end = start + MAX_PROXY_SIZE - 1
-            s3_params = {'Bucket': 'files', 'Key': s3_key, 'Range': f'bytes={start}-{end}'}
+            end = min(int(range_end), actual_size - 1)
+            if end - start + 1 > MAX_CHUNK:
+                end = start + MAX_CHUNK - 1
+            data = full_data[start:end + 1]
         else:
-            if file_size and file_size > MAX_PROXY_SIZE:
-                return err(f'Файл слишком большой для прямого прокси ({file_size} bytes). Используйте chunked загрузку с параметрами start/end', 413)
-            s3_params = {'Bucket': 'files', 'Key': s3_key}
-
-        obj = s3.get_object(**s3_params)
-        data = obj['Body'].read()
+            if actual_size > MAX_CHUNK:
+                return err(f'Файл слишком большой ({actual_size} bytes). Используйте start/end', 413)
+            data = full_data
 
         if qs.get('format') == 'bin':
             b64_body = base64.b64encode(data).decode('utf-8')
