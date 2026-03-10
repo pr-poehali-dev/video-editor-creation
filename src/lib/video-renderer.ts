@@ -145,13 +145,43 @@ export class VideoRenderer {
             const img = await this.loadImage(url);
             imageCache.set(assetId, img);
             loaded = true;
+            console.log(`[Render] Image loaded: ${asset.name}, url=${url.substring(0, 100)}`);
             break;
           } catch {
-            console.warn(`[Render] Image load failed: ${asset.name}, url=${url.substring(0, 80)}`);
+            console.warn(`[Render] Image load failed (CORS): ${asset.name}, url=${url.substring(0, 100)}`);
+          }
+          try {
+            const img = await this.loadImageNoCors(url);
+            imageCache.set(assetId, img);
+            loaded = true;
+            console.log(`[Render] Image loaded (no-cors fallback): ${asset.name}`);
+            break;
+          } catch {
+            console.warn(`[Render] Image load failed (no-cors): ${asset.name}`);
+          }
+        }
+        if (!loaded && !isNaN(parseInt(assetId.replace("server_", ""), 10))) {
+          try {
+            const serverId = parseInt(assetId.replace("server_", ""), 10);
+            const presignResp = await mediaApi.presign(serverId);
+            const tryUrls = [presignResp.cdn_url, presignResp.url].filter(Boolean) as string[];
+            for (const u of tryUrls) {
+              try {
+                const img = await this.loadImage(u);
+                imageCache.set(assetId, img);
+                loaded = true;
+                console.log(`[Render] Image loaded via presign: ${asset.name}`);
+                break;
+              } catch {
+                console.warn(`[Render] Presign image failed: ${u.substring(0, 80)}`);
+              }
+            }
+          } catch (e) {
+            console.error(`[Render] Presign request failed for ${asset.name}:`, e);
           }
         }
         if (!loaded) {
-          console.error(`[Render] Не удалось загрузить: ${asset.name}`);
+          console.error(`[Render] ALL METHODS FAILED for image: ${asset.name}`);
         }
       }
 
@@ -951,10 +981,11 @@ export class VideoRenderer {
 
   private getUrlsToTry(assetId: string, originalUrl: string): string[] {
     const cdnUrl = originalUrl;
-    const proxyUrl = this.resolveAssetUrl(assetId, originalUrl);
     const urls: string[] = [];
-    urls.push(proxyUrl);
-    if (cdnUrl && cdnUrl.startsWith('http') && cdnUrl !== proxyUrl) {
+    if (cdnUrl && cdnUrl.startsWith('https://')) {
+      urls.push(cdnUrl);
+    }
+    if (cdnUrl && cdnUrl.startsWith('blob:')) {
       urls.push(cdnUrl);
     }
     return urls;
@@ -1001,12 +1032,12 @@ export class VideoRenderer {
     onProgress?.(0.02);
     console.log(`[${label}] === AUDIO LOAD START: "${asset.name}", assetId=${assetId}, serverId=${serverId} ===`);
 
-    if (asset.url && asset.url.startsWith('http')) {
+    if (asset.url && asset.url.startsWith('https://')) {
       try {
-        console.log(`[${label}] Method 1: Direct CDN URL: ${asset.url.substring(0, 80)}`);
+        console.log(`[${label}] Method 1: Direct CDN URL: ${asset.url.substring(0, 120)}`);
         onProgress?.(0.1);
         const resp = await fetch(asset.url, { mode: 'cors' });
-        console.log(`[${label}] CDN response: status=${resp.status}, ok=${resp.ok}`);
+        console.log(`[${label}] CDN response: status=${resp.status}, ok=${resp.ok}, size=${resp.headers.get('content-length')}`);
         if (resp.ok) {
           onProgress?.(0.4);
           const arrayBuffer = await resp.arrayBuffer();
@@ -1022,6 +1053,8 @@ export class VideoRenderer {
       } catch (err) {
         console.warn(`[${label}] CDN fetch failed, will try proxy:`, err);
       }
+    } else {
+      console.log(`[${label}] Skipping Method 1: URL is not https:// — "${(asset.url || '').substring(0, 50)}"`);
     }
 
     if (!isNaN(serverId)) {
@@ -1029,21 +1062,41 @@ export class VideoRenderer {
         console.log(`[${label}] Method 2: Presigned URL for serverId=${serverId}`);
         onProgress?.(0.05);
         const presignResp = await mediaApi.presign(serverId);
-        if (presignResp.url) {
-          console.log(`[${label}] Got presigned URL, downloading...`);
-          onProgress?.(0.1);
-          const resp = await fetch(presignResp.url as string, { mode: 'cors' });
+        console.log(`[${label}] Presign response:`, JSON.stringify(presignResp));
+
+        const tryUrl = async (url: string, method: string): Promise<AudioBuffer | null> => {
+          console.log(`[${label}] Trying ${method}: ${url.substring(0, 100)}...`);
+          const resp = await fetch(url, { mode: 'cors' });
+          console.log(`[${label}] ${method} response: status=${resp.status}, type=${resp.headers.get('content-type')}`);
           if (resp.ok) {
-            onProgress?.(0.5);
             const arrayBuffer = await resp.arrayBuffer();
-            console.log(`[${label}] Downloaded: ${arrayBuffer.byteLength} bytes`);
+            console.log(`[${label}] ${method} downloaded: ${arrayBuffer.byteLength} bytes`);
             if (arrayBuffer.byteLength > 0) {
-              onProgress?.(0.85);
               const audioBuffer = await this.safeDecodeAudio(audioCtx, arrayBuffer, label);
-              onProgress?.(1);
-              console.log(`[${label}] === AUDIO OK (presigned): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
+              console.log(`[${label}] === AUDIO OK (${method}): "${asset.name}", duration=${audioBuffer.duration.toFixed(1)}s ===`);
               return audioBuffer;
             }
+          }
+          return null;
+        };
+
+        if (presignResp.cdn_url) {
+          onProgress?.(0.1);
+          try {
+            const result = await tryUrl(presignResp.cdn_url as string, 'CDN-presign');
+            if (result) { onProgress?.(1); return result; }
+          } catch (e) {
+            console.warn(`[${label}] CDN-presign failed:`, e);
+          }
+        }
+
+        if (presignResp.url) {
+          onProgress?.(0.3);
+          try {
+            const result = await tryUrl(presignResp.url as string, 'S3-presigned');
+            if (result) { onProgress?.(1); return result; }
+          } catch (e) {
+            console.warn(`[${label}] S3-presigned failed:`, e);
           }
         }
       } catch (err) {
@@ -1076,7 +1129,7 @@ export class VideoRenderer {
   }
 
   private async fetchChunked(serverId: number, label: string, onProgress?: (p: number) => void): Promise<ArrayBuffer> {
-    const CHUNK_SIZE = 200 * 1024;
+    const CHUNK_SIZE = 100 * 1024;
     const MAX_RETRIES = 6;
     const infoUrl = mediaApi.proxyInfoUrl(serverId);
     const infoResp = await fetch(infoUrl, { mode: 'cors' });
@@ -1100,14 +1153,16 @@ export class VideoRenderer {
         try {
           resp = await fetch(rangeUrl, { mode: 'cors' });
           if (resp.ok) break;
+          const errBody = await resp.text().catch(() => '');
+          console.warn(`[${label}] Chunk ${i} returned ${resp.status}: ${errBody.substring(0, 200)}, retry ${attempt + 1}/${MAX_RETRIES - 1}`);
           if (resp.status >= 500 && attempt < MAX_RETRIES - 1) {
-            console.warn(`[${label}] Chunk ${i} returned ${resp.status}, retry ${attempt + 1}/${MAX_RETRIES - 1}`);
-            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+            await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
             resp = null;
             continue;
           }
-        } catch {
-          if (attempt < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        } catch (e) {
+          console.warn(`[${label}] Chunk ${i} fetch error:`, e);
+          if (attempt < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, 3000 * (attempt + 1)));
         }
       }
 
@@ -1122,7 +1177,7 @@ export class VideoRenderer {
       console.log(`[${label}] Chunk ${i + 1}/${totalChunks}: ${(downloaded / 1024 / 1024).toFixed(1)}/${(totalSize / 1024 / 1024).toFixed(1)}MB`);
 
       if (i < totalChunks - 1) {
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 200));
       }
     }
 
@@ -1154,6 +1209,15 @@ export class VideoRenderer {
       img.crossOrigin = "anonymous";
       img.onload = () => resolve(img);
       img.onerror = () => reject(new Error(`Failed to load: ${url}`));
+      img.src = url;
+    });
+  }
+
+  private loadImageNoCors(url: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to load (no-cors): ${url}`));
       img.src = url;
     });
   }

@@ -384,7 +384,9 @@ def handle_presign(conn, user, qs):
         ExpiresIn=3600,
     )
 
-    return ok({'url': presigned_url, 'mime_type': mime_type, 'size': file_size})
+    cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{s3_key}"
+
+    return ok({'url': presigned_url, 'cdn_url': cdn_url, 'mime_type': mime_type, 'size': file_size})
 
 
 def handle_proxy(conn, user, qs):
@@ -415,7 +417,7 @@ def handle_proxy(conn, user, qs):
         range_start = qs.get('start')
         range_end = qs.get('end')
 
-        MAX_PROXY_SIZE = 200 * 1024
+        MAX_PROXY_SIZE = 100 * 1024
 
         if range_start is not None and range_end is not None:
             start = int(range_start)
