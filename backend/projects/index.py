@@ -163,6 +163,68 @@ def handler(event, context):
             conn.close()
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True, 'message': 'Проект сохранён'})}
 
+        elif path == '/clone' and method == 'POST':
+            project_id = body.get('id')
+            if not project_id:
+                conn.close()
+                return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'id обязателен'})}
+
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT name, description, project_data, thumbnail_url
+                FROM projects WHERE id = %s AND user_id = %s
+            """, (project_id, user['id']))
+            src = cur.fetchone()
+            if not src:
+                cur.close()
+                conn.close()
+                return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Проект не найден'})}
+
+            src_name, src_desc, src_data, src_thumb = src
+            new_name = f"{src_name} (копия)"
+
+            if isinstance(src_data, str):
+                try:
+                    src_data = json.loads(src_data)
+                except:
+                    src_data = {}
+
+            cur.execute("""
+                INSERT INTO projects (user_id, name, description, project_data, thumbnail_url)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id, created_at, updated_at
+            """, (user['id'], new_name, src_desc or '', json.dumps(src_data or {}), src_thumb or ''))
+            new_row = cur.fetchone()
+
+            cur.execute("""
+                SELECT id, file_name, file_type, mime_type, file_size, duration, width, height, s3_key, cdn_url
+                FROM media_files WHERE project_id = %s AND user_id = %s AND s3_key != 'deleted'
+            """, (project_id, user['id']))
+            media_rows = cur.fetchall()
+
+            for m in media_rows:
+                cur.execute("""
+                    INSERT INTO media_files (user_id, project_id, file_name, file_type, mime_type, file_size, duration, width, height, s3_key, cdn_url)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (user['id'], new_row[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8], m[9]))
+
+            conn.commit()
+            cur.close()
+            conn.close()
+
+            return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({
+                'project': {
+                    'id': new_row[0],
+                    'name': new_name,
+                    'description': src_desc or '',
+                    'thumbnail_url': src_thumb or '',
+                    'is_public': False,
+                    'created_at': str(new_row[1]),
+                    'updated_at': str(new_row[2]),
+                },
+                'message': 'Проект клонирован'
+            })}
+
         elif path == '/delete' and method == 'POST':
             project_id = body.get('id')
             if not project_id:

@@ -68,6 +68,8 @@ export const projects = {
     request(urls.projects, '/save', { method: 'PUT', body: JSON.stringify(data) }),
   delete: (id: number) =>
     request(urls.projects, '/delete', { method: 'POST', body: JSON.stringify({ id }) }),
+  clone: (id: number) =>
+    request(urls.projects, '/clone', { method: 'POST', body: JSON.stringify({ id }) }),
 };
 
 export const admin = {

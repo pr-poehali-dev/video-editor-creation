@@ -174,6 +174,19 @@ const Dashboard = () => {
     setEditingProjectId(null);
   };
 
+  const handleCloneProject = async (p: Project) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res: any = await projects.clone(p.id);
+      if (res.project) {
+        setMyProjects(prev => [res.project, ...prev]);
+        toast({ title: 'Проект клонирован', description: `Создана копия: ${res.project.name}` });
+      }
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось клонировать проект', variant: 'destructive' });
+    }
+  };
+
   const handleDeleteProject = async () => {
     if (!deleteProject) return;
     const name = deleteProject.name;
@@ -378,6 +391,13 @@ const Dashboard = () => {
                           title="Переименовать"
                         >
                           <Icon name="Pencil" size={12} className="text-white" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleCloneProject(p); }}
+                          className="w-7 h-7 rounded-md bg-black/60 hover:bg-black/80 flex items-center justify-center transition-colors"
+                          title="Клонировать проект"
+                        >
+                          <Icon name="Copy" size={12} className="text-white" />
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); setDeleteProject(p); }}
