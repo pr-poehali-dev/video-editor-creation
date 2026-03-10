@@ -70,6 +70,9 @@ export const projects = {
     request(urls.projects, '/delete', { method: 'POST', body: JSON.stringify({ id }) }),
   clone: (id: number) =>
     request(urls.projects, '/clone', { method: 'POST', body: JSON.stringify({ id }) }),
+  clonePublic: (id: number) =>
+    request(urls.projects, '/clone', { method: 'POST', body: JSON.stringify({ id, public: true }) }),
+  publicList: () => request(urls.projects, '/public'),
 };
 
 export const admin = {

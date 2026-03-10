@@ -163,6 +163,30 @@ def handler(event, context):
             conn.close()
             return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'ok': True, 'message': 'Проект сохранён'})}
 
+        elif path == '/public' and method == 'GET':
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT p.id, p.name, p.description, p.thumbnail_url, p.created_at, p.updated_at, u.name as author
+                FROM projects p JOIN users u ON p.user_id = u.id
+                WHERE p.is_public = TRUE
+                ORDER BY p.updated_at DESC LIMIT 50
+            """)
+            rows = cur.fetchall()
+            cur.close()
+            conn.close()
+
+            items = [{
+                'id': r[0], 'name': r[1], 'description': r[2],
+                'thumbnail_url': r[3], 'created_at': str(r[4]),
+                'updated_at': str(r[5]), 'author': r[6],
+                'is_own': False
+            } for r in rows]
+
+            for item in items:
+                pass
+
+            return {'statusCode': 200, 'headers': CORS, 'body': json.dumps({'projects': items})}
+
         elif path == '/clone' and method == 'POST':
             project_id = body.get('id')
             if not project_id:
@@ -170,17 +194,26 @@ def handler(event, context):
                 return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'id обязателен'})}
 
             cur = conn.cursor()
-            cur.execute("""
-                SELECT name, description, project_data, thumbnail_url
-                FROM projects WHERE id = %s AND user_id = %s
-            """, (project_id, user['id']))
+
+            is_public_clone = body.get('public', False)
+            if is_public_clone:
+                cur.execute("""
+                    SELECT name, description, project_data, thumbnail_url, user_id
+                    FROM projects WHERE id = %s AND is_public = TRUE
+                """, (project_id,))
+            else:
+                cur.execute("""
+                    SELECT name, description, project_data, thumbnail_url, user_id
+                    FROM projects WHERE id = %s AND user_id = %s
+                """, (project_id, user['id']))
+
             src = cur.fetchone()
             if not src:
                 cur.close()
                 conn.close()
                 return {'statusCode': 404, 'headers': CORS, 'body': json.dumps({'error': 'Проект не найден'})}
 
-            src_name, src_desc, src_data, src_thumb = src
+            src_name, src_desc, src_data, src_thumb, src_owner = src
             new_name = f"{src_name} (копия)"
 
             if isinstance(src_data, str):
@@ -199,7 +232,7 @@ def handler(event, context):
             cur.execute("""
                 SELECT id, file_name, file_type, mime_type, file_size, duration, width, height, s3_key, cdn_url
                 FROM media_files WHERE project_id = %s AND user_id = %s AND s3_key != 'deleted'
-            """, (project_id, user['id']))
+            """, (project_id, src_owner))
             media_rows = cur.fetchall()
 
             for m in media_rows:

@@ -20,6 +20,16 @@ interface Project {
   updated_at: string;
 }
 
+interface PublicProject {
+  id: number;
+  name: string;
+  description: string;
+  thumbnail_url: string;
+  author: string;
+  created_at: string;
+  updated_at: string;
+}
+
 interface Transaction {
   id: number;
   type: string;
@@ -75,6 +85,8 @@ const Dashboard = () => {
   const [savingName, setSavingName] = useState(false);
   const [deleteProject, setDeleteProject] = useState<Project | null>(null);
   const [mediaUploading, setMediaUploading] = useState(false);
+  const [publicProjects, setPublicProjects] = useState<PublicProject[]>([]);
+  const [cloningPublicId, setCloningPublicId] = useState<number | null>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -97,17 +109,19 @@ const Dashboard = () => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [projRes, txRes, purRes, balRes, mediaRes] = await Promise.all([
+      const [projRes, txRes, purRes, balRes, mediaRes, pubRes] = await Promise.all([
         projects.list(),
         wallet.transactions(),
         wallet.purchases(),
         wallet.balance(),
         media.list(),
+        projects.publicList().catch(() => ({ projects: [] })),
       ]);
       setMyProjects(projRes.projects || []);
       setTransactions(txRes.items || []);
       setPurchases(purRes.items || []);
       setBalance(balRes.balance || 0);
+      setPublicProjects((pubRes as { projects: PublicProject[] }).projects || []);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setMediaFiles((mediaRes as any).files || []);
     } catch { /* ignore */ }
@@ -185,6 +199,21 @@ const Dashboard = () => {
     } catch {
       toast({ title: 'Ошибка', description: 'Не удалось клонировать проект', variant: 'destructive' });
     }
+  };
+
+  const handleClonePublicProject = async (p: PublicProject) => {
+    setCloningPublicId(p.id);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const res: any = await projects.clonePublic(p.id);
+      if (res.project) {
+        setMyProjects(prev => [res.project, ...prev]);
+        toast({ title: 'Проект клонирован', description: `«${p.name}» добавлен в ваши проекты` });
+      }
+    } catch {
+      toast({ title: 'Ошибка', description: 'Не удалось клонировать проект', variant: 'destructive' });
+    }
+    setCloningPublicId(null);
   };
 
   const handleDeleteProject = async () => {
@@ -297,6 +326,9 @@ const Dashboard = () => {
             <TabsTrigger value="projects" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
               <Icon name="FolderOpen" size={12} className="mr-1.5" /> Мои проекты
             </TabsTrigger>
+            <TabsTrigger value="gallery" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
+              <Icon name="Globe" size={12} className="mr-1.5" /> Галерея
+            </TabsTrigger>
             <TabsTrigger value="wallet" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
               <Icon name="Wallet" size={12} className="mr-1.5" /> Кошелёк
             </TabsTrigger>
@@ -405,6 +437,60 @@ const Dashboard = () => {
                           title="Удалить"
                         >
                           <Icon name="Trash2" size={12} className="text-white" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="gallery">
+            <div className="editor-panel rounded-xl p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold flex items-center gap-2">
+                  <Icon name="Globe" size={16} /> Публичные проекты
+                </h2>
+                <span className="text-xs text-muted-foreground">{publicProjects.length} проектов</span>
+              </div>
+              {publicProjects.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Icon name="Globe" size={48} className="mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">Публичных проектов пока нет</p>
+                  <p className="text-xs mt-1">Когда кто-то сделает свой проект публичным, он появится здесь</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {publicProjects.map(p => (
+                    <div key={p.id} className="rounded-lg overflow-hidden group hover:ring-1 hover:ring-primary/50 transition-all relative" style={{ background: 'hsl(var(--editor-bg))' }}>
+                      <div className="aspect-video flex items-center justify-center" style={{ background: 'hsl(var(--editor-panel-header))' }}>
+                        {p.thumbnail_url ? (
+                          <img src={p.thumbnail_url} alt={p.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Icon name="Film" size={32} className="text-muted-foreground/30" />
+                        )}
+                      </div>
+                      <div className="p-3">
+                        <div className="text-sm font-medium truncate">{p.name}</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                          <Icon name="User" size={10} />
+                          <span>{p.author}</span>
+                          <span>&bull;</span>
+                          <span>{new Date(p.updated_at).toLocaleDateString('ru-RU')}</span>
+                        </div>
+                        {p.description && (
+                          <div className="text-[10px] text-muted-foreground mt-1 line-clamp-2">{p.description}</div>
+                        )}
+                      </div>
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleClonePublicProject(p)}
+                          disabled={cloningPublicId === p.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-black/70 hover:bg-primary text-white text-[11px] font-medium transition-colors disabled:opacity-50"
+                        >
+                          <Icon name={cloningPublicId === p.id ? 'Loader2' : 'Copy'} size={12} className={cloningPublicId === p.id ? 'animate-spin' : ''} />
+                          {cloningPublicId === p.id ? 'Копирую...' : 'Копировать себе'}
                         </button>
                       </div>
                     </div>
