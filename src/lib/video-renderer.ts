@@ -1076,7 +1076,8 @@ export class VideoRenderer {
   }
 
   private async fetchChunked(serverId: number, label: string, onProgress?: (p: number) => void): Promise<ArrayBuffer> {
-    const CHUNK_SIZE = 100 * 1024;
+    const CHUNK_SIZE = 200 * 1024;
+    const MAX_RETRIES = 6;
     const infoUrl = mediaApi.proxyInfoUrl(serverId);
     const infoResp = await fetch(infoUrl, { mode: 'cors' });
     if (!infoResp.ok) throw new Error(`Info request failed: ${infoResp.status}`);
@@ -1092,36 +1093,37 @@ export class VideoRenderer {
       if (this.cancelled) throw new Error("Отменено");
       const start = i * CHUNK_SIZE;
       const end = Math.min(start + CHUNK_SIZE - 1, totalSize - 1);
-      const rangeUrl = mediaApi.proxyRangeUrl(serverId, start, end);
+      const rangeUrl = mediaApi.proxyBinUrl(serverId, start, end);
 
       let resp: Response | null = null;
-      for (let attempt = 0; attempt < 4; attempt++) {
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         try {
           resp = await fetch(rangeUrl, { mode: 'cors' });
           if (resp.ok) break;
-          if (resp.status >= 500 && attempt < 3) {
-            console.warn(`[${label}] Chunk ${i} returned ${resp.status}, retry ${attempt + 1}/3`);
-            await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+          if (resp.status >= 500 && attempt < MAX_RETRIES - 1) {
+            console.warn(`[${label}] Chunk ${i} returned ${resp.status}, retry ${attempt + 1}/${MAX_RETRIES - 1}`);
+            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
             resp = null;
             continue;
           }
         } catch {
-          if (attempt < 3) await new Promise(r => setTimeout(r, 1500 * (attempt + 1)));
+          if (attempt < MAX_RETRIES - 1) await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
         }
       }
 
       if (!resp || !resp.ok) throw new Error(`Chunk ${i} failed after retries`);
 
-      const json = await resp.json();
-      if (json.error) throw new Error(`Chunk ${i}: ${json.error}`);
-      const binaryStr = atob(json.data);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+      const arrayBuf = await resp.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuf);
       chunks.push(bytes);
       downloaded += bytes.byteLength;
       const progress = 0.2 + 0.6 * (downloaded / totalSize);
       onProgress?.(progress);
       console.log(`[${label}] Chunk ${i + 1}/${totalChunks}: ${(downloaded / 1024 / 1024).toFixed(1)}/${(totalSize / 1024 / 1024).toFixed(1)}MB`);
+
+      if (i < totalChunks - 1) {
+        await new Promise(r => setTimeout(r, 100));
+      }
     }
 
     const result = new Uint8Array(downloaded);

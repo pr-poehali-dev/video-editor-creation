@@ -415,7 +415,7 @@ def handle_proxy(conn, user, qs):
         range_start = qs.get('start')
         range_end = qs.get('end')
 
-        MAX_PROXY_SIZE = 100 * 1024
+        MAX_PROXY_SIZE = 200 * 1024
 
         if range_start is not None and range_end is not None:
             start = int(range_start)
@@ -431,8 +431,21 @@ def handle_proxy(conn, user, qs):
 
         obj = s3.get_object(**s3_params)
         data = obj['Body'].read()
-        b64_data = base64.b64encode(data).decode('utf-8')
 
+        if qs.get('format') == 'bin':
+            b64_body = base64.b64encode(data).decode('utf-8')
+            return {
+                'statusCode': 200,
+                'headers': {
+                    **CORS,
+                    'Content-Type': mime_type or 'application/octet-stream',
+                    'Content-Length': str(len(data)),
+                },
+                'body': b64_body,
+                'isBase64Encoded': True,
+            }
+
+        b64_data = base64.b64encode(data).decode('utf-8')
         return ok({'data': b64_data, 'mime_type': mime_type, 'size': len(data)})
     except Exception as e:
         return err(f'Ошибка при загрузке файла: {str(e)}', 500)

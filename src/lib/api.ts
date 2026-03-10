@@ -126,6 +126,10 @@ export const media = {
     const token = getToken();
     return `${urls.media}?route=${encodeURIComponent('/proxy')}&id=${id}&token=${token}&start=${start}&end=${end}`;
   },
+  proxyBinUrl: (id: number, start: number, end: number) => {
+    const token = getToken();
+    return `${urls.media}?route=${encodeURIComponent('/proxy')}&id=${id}&token=${token}&start=${start}&end=${end}&format=bin`;
+  },
   presign: (id: number) =>
     request(urls.media, `/presign?id=${id}`),
 };
