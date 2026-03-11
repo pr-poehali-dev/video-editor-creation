@@ -1,4 +1,4 @@
-"""Загрузка и получение медиафайлов пользователя (обычная + chunked до 150 МБ)"""
+"""Загрузка и получение медиафайлов пользователя (presigned upload + legacy chunked)"""
 import json
 import os
 import base64
@@ -98,6 +98,16 @@ def handler(event, context):
         conn.close()
         return result
 
+    if route == '/direct/init' and method == 'POST':
+        result = handle_direct_init(conn, user, event)
+        conn.close()
+        return result
+
+    if route == '/direct/confirm' and method == 'POST':
+        result = handle_direct_confirm(conn, user, event)
+        conn.close()
+        return result
+
     if route == '/list' and method == 'GET':
         result = handle_list(conn, user, qs)
         conn.close()
@@ -188,6 +198,117 @@ def handle_upload(conn, user, event):
             'height': height,
             'cdn_url': cdn_url,
             'created_at': str(row[1]),
+        }
+    })
+
+
+def handle_direct_init(conn, user, event):
+    body_str = event.get('body', '{}')
+    if event.get('isBase64Encoded'):
+        body_str = base64.b64decode(body_str).decode('utf-8')
+    body = json.loads(body_str)
+
+    file_name = body.get('file_name', 'file')
+    mime_type = body.get('mime_type', 'application/octet-stream')
+    file_size = body.get('file_size', 0)
+
+    if mime_type not in ALLOWED_TYPES:
+        return err(f'Тип файла {mime_type} не поддерживается')
+    if file_size > MAX_FILE_SIZE:
+        return err(f'Файл слишком большой (макс {MAX_FILE_SIZE // (1024*1024)} МБ)')
+
+    ext = file_name.rsplit('.', 1)[-1].lower() if '.' in file_name else 'bin'
+    unique_name = f"{uuid.uuid4().hex}.{ext}"
+    s3_key = f"media/{user['id']}/{unique_name}"
+
+    s3 = get_s3()
+    presigned_url = s3.generate_presigned_url(
+        'put_object',
+        Params={
+            'Bucket': 'files',
+            'Key': s3_key,
+            'ContentType': mime_type,
+        },
+        ExpiresIn=3600,
+    )
+
+    upload_id = uuid.uuid4().hex
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO chunked_uploads (upload_id, user_id, file_name, mime_type, file_size, total_chunks, s3_key)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """, (upload_id, user['id'], file_name, mime_type, file_size, 0, s3_key))
+    conn.commit()
+    cur.close()
+
+    return ok({
+        'upload_id': upload_id,
+        'upload_url': presigned_url,
+        's3_key': s3_key,
+    })
+
+
+def handle_direct_confirm(conn, user, event):
+    body_str = event.get('body', '{}')
+    if event.get('isBase64Encoded'):
+        body_str = base64.b64decode(body_str).decode('utf-8')
+    body = json.loads(body_str)
+
+    upload_id = body.get('upload_id')
+    duration = body.get('duration', 0)
+    width = body.get('width')
+    height = body.get('height')
+    project_id = body.get('project_id')
+
+    if not upload_id:
+        return err('upload_id обязателен')
+
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT file_name, mime_type, file_size, s3_key
+        FROM chunked_uploads WHERE upload_id = %s AND user_id = %s
+    """, (upload_id, user['id']))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        return err('Загрузка не найдена', 404)
+
+    file_name, mime_type, file_size, s3_key = row
+    file_type = ALLOWED_TYPES.get(mime_type, 'video')
+
+    s3 = get_s3()
+    try:
+        head = s3.head_object(Bucket='files', Key=s3_key)
+        actual_size = head['ContentLength']
+    except Exception:
+        cur.close()
+        return err('Файл не найден в хранилище. Загрузка не завершена.', 404)
+
+    cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{s3_key}"
+
+    cur.execute("""
+        INSERT INTO media_files (user_id, project_id, file_name, file_type, mime_type, file_size, duration, width, height, s3_key, cdn_url)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id, created_at
+    """, (user['id'], project_id, file_name, file_type, mime_type, actual_size, duration, width, height, s3_key, cdn_url))
+    media_row = cur.fetchone()
+
+    cur.execute("DELETE FROM chunked_uploads WHERE upload_id = %s", (upload_id,))
+    conn.commit()
+    cur.close()
+
+    return ok({
+        'file': {
+            'id': media_row[0],
+            'file_name': file_name,
+            'file_type': file_type,
+            'mime_type': mime_type,
+            'file_size': actual_size,
+            'duration': duration,
+            'width': width,
+            'height': height,
+            'cdn_url': cdn_url,
+            'created_at': str(media_row[1]),
         }
     })
 

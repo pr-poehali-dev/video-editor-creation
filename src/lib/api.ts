@@ -109,6 +109,10 @@ export const shop = {
 export const media = {
   upload: (data: { file_data: string; file_name: string; mime_type: string; duration?: number; width?: number; height?: number; project_id?: number }) =>
     request(urls.media, '/upload', { method: 'POST', body: JSON.stringify(data) }),
+  directInit: (data: { file_name: string; mime_type: string; file_size: number }) =>
+    request(urls.media, '/direct/init', { method: 'POST', body: JSON.stringify(data) }),
+  directConfirm: (data: { upload_id: string; duration?: number; width?: number; height?: number; project_id?: number }) =>
+    request(urls.media, '/direct/confirm', { method: 'POST', body: JSON.stringify(data) }),
   chunkedInit: (data: { file_name: string; mime_type: string; file_size: number; total_chunks: number }) =>
     request(urls.media, '/chunked/init', { method: 'POST', body: JSON.stringify(data) }),
   chunkedPart: (data: { upload_id: string; chunk_index: number; chunk_data: string }) =>

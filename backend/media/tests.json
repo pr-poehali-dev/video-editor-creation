@@ -61,6 +61,22 @@
       "expectedStatus": 401,
       "expectedBody": {"error": "string"},
       "bodyMatcher": "partial"
+    },
+    {
+      "name": "Direct init without auth",
+      "method": "POST",
+      "path": "/?route=%2Fdirect%2Finit",
+      "expectedStatus": 401,
+      "expectedBody": {"error": "string"},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Direct confirm without auth",
+      "method": "POST",
+      "path": "/?route=%2Fdirect%2Fconfirm",
+      "expectedStatus": 401,
+      "expectedBody": {"error": "string"},
+      "bodyMatcher": "partial"
     }
   ]
 }
