@@ -107,7 +107,7 @@ const getMediaDuration = (file: File): Promise<number> => {
 
 const DIRECT_UPLOAD_LIMIT = 2 * 1024 * 1024;
 const MAX_UPLOAD_SIZE = 150 * 1024 * 1024;
-const CHUNK_SIZE = 2 * 1024 * 1024;
+const CHUNK_SIZE = 1 * 1024 * 1024;
 
 const MIME_BY_EXT: Record<string, string> = {
   mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', flac: 'audio/flac',
@@ -264,49 +264,51 @@ const MediaPanel = () => {
     }
   }, []);
 
-  const doDirectUpload = useCallback(async (file: File, assetId: string, duration: number) => {
+  const doChunkedUpload = useCallback(async (file: File, assetId: string, duration: number) => {
     setUploading(prev => prev.includes(assetId) ? prev : [...prev, assetId]);
-    setUploadProgress(prev => ({ ...prev, [assetId]: { current: 0, total: 100 } }));
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    setUploadProgress(prev => ({ ...prev, [assetId]: { current: 0, total: totalChunks } }));
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const initRes: any = await mediaApi.directInit({
+      const initRes: any = await mediaApi.chunkedInit({
         file_name: file.name,
         mime_type: getFileMime(file),
         file_size: file.size,
+        total_chunks: totalChunks,
       });
-      const { upload_id, upload_url } = initRes;
+      const uploadId = initRes.upload_id;
 
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('PUT', upload_url, true);
-        xhr.setRequestHeader('Content-Type', getFileMime(file));
-        xhr.upload.addEventListener('progress', (e) => {
-          if (e.lengthComputable) {
-            const pct = Math.round((e.loaded / e.total) * 100);
-            setUploadProgress(prev => ({ ...prev, [assetId]: { current: pct, total: 100 } }));
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, file.size);
+        const chunk = file.slice(start, end);
+        const chunkB64 = await blobToBase64(chunk);
+
+        let sent = false;
+        for (let attempt = 0; attempt < 3 && !sent; attempt++) {
+          try {
+            await mediaApi.chunkedPart({ upload_id: uploadId, chunk_index: i, chunk_data: chunkB64 });
+            sent = true;
+          } catch {
+            if (attempt === 2) throw new Error(`Не удалось загрузить часть ${i + 1}/${totalChunks}`);
+            await new Promise(r => setTimeout(r, 2000));
           }
-        });
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) resolve();
-          else reject(new Error(`Ошибка загрузки: ${xhr.status}`));
-        };
-        xhr.onerror = () => reject(new Error('Ошибка сети'));
-        xhr.onabort = () => reject(new Error('Загрузка отменена'));
-        xhr.send(file);
-      });
+        }
+        setUploadProgress(prev => ({ ...prev, [assetId]: { current: i + 1, total: totalChunks } }));
+      }
 
       const pid = useEditorStore.getState().project.id;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const confirmRes: any = await mediaApi.directConfirm({
-        upload_id,
+      const completeRes: any = await mediaApi.chunkedComplete({
+        upload_id: uploadId,
         duration,
         project_id: pid,
       });
 
-      if (confirmRes.file?.cdn_url) {
-        const newId = `server_${confirmRes.file.id}`;
+      if (completeRes.file?.cdn_url) {
+        const newId = `server_${completeRes.file.id}`;
         useEditorStore.setState((s) => ({
-          assets: s.assets.map(a => a.id === assetId ? { ...a, url: confirmRes.file.cdn_url, id: newId } : a),
+          assets: s.assets.map(a => a.id === assetId ? { ...a, url: completeRes.file.cdn_url, id: newId } : a),
           tracks: s.tracks.map(t => ({
             ...t,
             clips: t.clips.map(c => c.assetId === assetId ? { ...c, assetId: newId } : c),
@@ -316,7 +318,7 @@ const MediaPanel = () => {
       setUploadErrors(prev => prev.filter(x => x.assetId !== assetId));
     } catch (e: unknown) {
       const errMsg = e && typeof e === 'object' && 'error' in e ? (e as { error: string }).error : String(e);
-      console.error('Direct upload failed:', errMsg, e);
+      console.error('Chunked upload failed:', errMsg, e);
       setUploadErrors(prev => [...prev, {
         name: file.name,
         error: String(e),
@@ -337,11 +339,11 @@ const MediaPanel = () => {
     if (!err) return;
     setUploadErrors(prev => prev.filter(x => x.assetId !== assetId));
     if (err.file.size > DIRECT_UPLOAD_LIMIT) {
-      doDirectUpload(err.file, err.assetId, err.duration);
+      doChunkedUpload(err.file, err.assetId, err.duration);
     } else {
       doUpload(err.file, err.assetId, err.duration, 1);
     }
-  }, [uploadErrors, doUpload, doDirectUpload]);
+  }, [uploadErrors, doUpload, doChunkedUpload]);
 
   const dismissError = useCallback((assetId: string) => {
     setUploadErrors(prev => prev.filter(x => x.assetId !== assetId));
@@ -380,11 +382,11 @@ const MediaPanel = () => {
     }
 
     if (file.size > DIRECT_UPLOAD_LIMIT) {
-      doDirectUpload(file, asset.id, duration);
+      doChunkedUpload(file, asset.id, duration);
     } else {
       doUpload(file, asset.id, duration, 1);
     }
-  }, [addAsset, isAuthenticated, doUpload, doDirectUpload]);
+  }, [addAsset, isAuthenticated, doUpload, doChunkedUpload]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;

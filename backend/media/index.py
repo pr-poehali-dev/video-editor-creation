@@ -14,7 +14,7 @@ CORS = {
     'Access-Control-Max-Age': '86400',
 }
 MAX_FILE_SIZE = 150 * 1024 * 1024
-CHUNK_SIZE = 2 * 1024 * 1024
+CHUNK_SIZE = 1 * 1024 * 1024
 
 ALLOWED_TYPES = {
     'image/jpeg': 'image', 'image/png': 'image', 'image/webp': 'image', 'image/gif': 'image',
