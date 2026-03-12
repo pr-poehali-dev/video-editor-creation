@@ -3,6 +3,7 @@ import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
 import useAuth from '@/hooks/use-auth';
 import { media as mediaApi, shop } from '@/lib/api';
+import { generateAudio } from '@/lib/audio-synth';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -903,13 +904,16 @@ const MediaPanel = () => {
                             <div
                               key={i}
                               onClick={() => {
-                                const trackId = getCompatibleTrack('audio');
-                                addClip(trackId, {
-                                  type: 'audio',
-                                  startTime: currentTime,
-                                  duration: p.slug === 'pack-sound-fx' ? 2 : 30,
-                                  name: f,
-                                });
+                                const dur = p.slug === 'pack-sound-fx' ? 2 : 30;
+                                const audioUrl = generateAudio(f, dur);
+                                if (audioUrl) {
+                                  const asset = addAsset({ name: f, type: 'audio', url: audioUrl, duration: dur });
+                                  const trackId = getCompatibleTrack('audio');
+                                  addClipFromAsset(asset, trackId, currentTime);
+                                } else {
+                                  const trackId = getCompatibleTrack('audio');
+                                  addClip(trackId, { type: 'audio', startTime: currentTime, duration: dur, name: f });
+                                }
                               }}
                               className="flex items-center gap-2 p-1.5 rounded hover:bg-green-500/10 cursor-pointer transition-colors"
                             >
