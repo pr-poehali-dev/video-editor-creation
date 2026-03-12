@@ -46,6 +46,7 @@ interface ActiveClip {
   filters: Array<{ name: string; type: string; params: Record<string, number | string | boolean> }>;
   fadeOpacity: number;
   transitionStyle: string;
+  transitionFilter: string;
   positionX: number;
   positionY: number;
   scale: number;
@@ -148,18 +149,29 @@ const PreviewPanel = () => {
           }
 
           let transitionStyle = '';
+          let transitionFilter = '';
           const tr = clip.transition;
           if (tr && tr.duration > 0 && elapsed < tr.duration) {
             const t = elapsed / tr.duration;
             const e = t * t * (3 - 2 * t);
             fadeOpacity *= t;
             switch (tr.type) {
+              case 'растворение': break;
               case 'слайд влево': transitionStyle = `translateX(${(1 - e) * 100}%)`; break;
               case 'слайд вправо': transitionStyle = `translateX(${-(1 - e) * 100}%)`; break;
               case 'слайд вверх': transitionStyle = `translateY(${(1 - e) * 100}%)`; break;
               case 'слайд вниз': transitionStyle = `translateY(${-(1 - e) * 100}%)`; break;
               case 'масштаб': transitionStyle = `scale(${0.3 + 0.7 * e})`; break;
+              case 'затемнение': transitionFilter = `brightness(${e})`; break;
+              case 'засветка': transitionFilter = `brightness(${1 + (1 - e) * 2})`; break;
               case 'поворот': transitionStyle = `rotate(${(1 - e) * 90}deg) scale(${e})`; break;
+              case 'глитч': transitionStyle = `translateX(${(1 - e) * (Math.random() > 0.5 ? 8 : -8)}px) skewX(${(1 - e) * 15}deg)`; transitionFilter = `hue-rotate(${(1 - e) * 180}deg) saturate(${1 + (1 - e) * 3})`; break;
+              case 'вспышка': fadeOpacity = t < 0.3 ? t * 3 : 1; transitionFilter = `brightness(${1 + (1 - e) * 3})`; break;
+              case 'размытие перехода': transitionFilter = `blur(${(1 - e) * 20}px)`; break;
+              case 'пиксели': transitionStyle = `scale(${0.5 + 0.5 * e})`; transitionFilter = `contrast(${1 + (1 - e) * 0.5}) brightness(${0.8 + 0.2 * e})`; break;
+              case 'волна': transitionStyle = `scaleY(${0.3 + 0.7 * e}) translateY(${(1 - e) * 30}%)`; break;
+              case 'наплыв': fadeOpacity = e * clip.opacity; break;
+              case 'сжатие': transitionStyle = `scaleX(${e}) scaleY(${0.5 + 0.5 * e})`; break;
               default: break;
             }
           }
@@ -191,6 +203,7 @@ const PreviewPanel = () => {
             filters: clip.filters || [],
             fadeOpacity,
             transitionStyle,
+            transitionFilter,
             positionX: clip.positionX ?? 50,
             positionY: clip.positionY ?? 50,
             scale: clip.scale ?? 100,
@@ -440,13 +453,15 @@ const PreviewPanel = () => {
         ? `translate(${clip.positionX - 50}%, ${clip.positionY - 50}%) scale(${clip.scale / 100}) rotate(${clip.rotation}deg)`
         : '';
       const combinedTransform = [clip.transitionStyle, clipTransform].filter(Boolean).join(' ') || undefined;
+      const baseFilter = getFilterStyle(clip.filters, clipPreview);
+      const combinedFilter = [baseFilter !== 'none' ? baseFilter : '', clip.transitionFilter].filter(Boolean).join(' ') || undefined;
       const fitClass = clip.fitMode === 'cover' ? 'object-cover' : clip.fitMode === 'fill' ? 'object-fill' : 'object-contain';
       const isSelected = selectedClipId === clip.id;
       return (
         <div
           key={clip.id}
           className="absolute inset-0"
-          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview), transform: combinedTransform }}
+          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: combinedFilter, transform: combinedTransform }}
         >
           <img
             src={clip.assetUrl}
@@ -494,13 +509,15 @@ const PreviewPanel = () => {
         ? `translate(${clip.positionX - 50}%, ${clip.positionY - 50}%) scale(${clip.scale / 100}) rotate(${clip.rotation}deg)`
         : '';
       const combinedTransform = [clip.transitionStyle, clipTransform].filter(Boolean).join(' ') || undefined;
+      const baseFilter = getFilterStyle(clip.filters, clipPreview);
+      const combinedFilter = [baseFilter !== 'none' ? baseFilter : '', clip.transitionFilter].filter(Boolean).join(' ') || undefined;
       const fitClass = clip.fitMode === 'cover' ? 'object-cover' : clip.fitMode === 'fill' ? 'object-fill' : 'object-contain';
       const isSelected = selectedClipId === clip.id;
       return (
         <div
           key={clip.id}
           className="absolute inset-0"
-          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: getFilterStyle(clip.filters, clipPreview), transform: combinedTransform }}
+          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: combinedFilter, transform: combinedTransform }}
         >
           <video
             ref={(el) => {

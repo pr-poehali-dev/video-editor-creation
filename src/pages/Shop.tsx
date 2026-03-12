@@ -258,7 +258,14 @@ const Shop = () => {
                     ) : (
                       <span className="text-lg font-bold">{item.price.toFixed(0)} ₽</span>
                     )}
-                    {!item.owned && (
+                    {item.owned ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); navigate('/'); }}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors flex items-center gap-1"
+                      >
+                        <Icon name="Clapperboard" size={10} /> Редактор
+                      </button>
+                    ) : (
                       <button
                         onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}
                         className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
@@ -362,8 +369,24 @@ const Shop = () => {
               )}
 
               {selectedItem.owned ? (
-                <div className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/10 text-green-400 text-sm font-medium">
-                  <Icon name="CheckCircle" size={18} /> Уже установлено
+                <div>
+                  <div className="flex items-center justify-center gap-2 py-3 rounded-lg bg-green-500/10 text-green-400 text-sm font-medium mb-2">
+                    <Icon name="CheckCircle" size={18} /> Установлено
+                  </div>
+                  <div className="text-[11px] text-muted-foreground text-center">
+                    {selectedItem.category === 'effects' && 'Доступно во вкладке «Эффекты» в редакторе'}
+                    {selectedItem.category === 'transitions' && 'Доступно во вкладке «Переходы» в редакторе'}
+                    {selectedItem.category === 'titles' && 'Доступно во вкладке «Текст» в редакторе'}
+                    {selectedItem.category === 'audio' && 'Доступно во вкладке «Текст» → раздел «Аудио» в редакторе'}
+                    {selectedItem.category === 'templates' && 'Доступно во вкладке «Текст» → раздел «Шаблоны» в редакторе'}
+                    {selectedItem.category === 'features' && 'Расширение активировано во вкладке «Эффекты» в редакторе'}
+                  </div>
+                  <button
+                    onClick={() => { setSelectedItem(null); navigate('/'); }}
+                    className="w-full mt-3 py-2.5 rounded-lg font-medium text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Icon name="Clapperboard" size={16} /> Открыть редактор
+                  </button>
                 </div>
               ) : (
                 <div className="flex gap-2">

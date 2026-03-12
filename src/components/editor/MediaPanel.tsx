@@ -499,22 +499,30 @@ const MediaPanel = () => {
 
   const handleAddText = useCallback((presetName: string) => {
     const trackId = getCompatibleTrack('text');
-    const textDefaults: Record<string, { text: string; fontSize: number }> = {
+    const textDefaults: Record<string, { text: string; fontSize: number; fontColor?: string; duration?: number }> = {
       'Заголовок': { text: 'Заголовок', fontSize: 72 },
       'Субтитры': { text: 'Субтитры', fontSize: 24 },
       'Нижняя третья': { text: 'Имя автора', fontSize: 28 },
       'Титры': { text: 'Титры', fontSize: 36 },
       'Выноска': { text: 'Примечание', fontSize: 18 },
+      'Кинотитры': { text: 'КИНОТИТРЫ', fontSize: 64, fontColor: '#f5c518', duration: 6 },
+      'Эпичный заголовок': { text: 'ЭПИЧНЫЙ ЗАГОЛОВОК', fontSize: 80, fontColor: '#ffffff', duration: 5 },
+      'Финальные титры': { text: 'Режиссёр\nОператор\nМонтажёр', fontSize: 32, duration: 8 },
+      'Цитата': { text: '«Текст цитаты»', fontSize: 36, fontColor: '#e0e0e0', duration: 5 },
+      'Строка имени': { text: 'Имя Фамилия', fontSize: 24, duration: 4 },
+      'Подпись докладчика': { text: 'Имя Фамилия\nДолжность', fontSize: 22, duration: 5 },
+      'Новостная плашка': { text: 'СРОЧНАЯ НОВОСТЬ', fontSize: 26, fontColor: '#ff3333', duration: 5 },
+      'Локация': { text: 'Москва, Россия', fontSize: 20, duration: 4 },
     };
     const defaults = textDefaults[presetName] || { text: presetName, fontSize: 36 };
     addClip(trackId, {
       type: 'text',
       startTime: currentTime,
-      duration: 5,
+      duration: defaults.duration || 5,
       name: presetName,
       text: defaults.text,
       fontSize: defaults.fontSize,
-      fontColor: '#ffffff',
+      fontColor: defaults.fontColor || '#ffffff',
     });
   }, [getCompatibleTrack, addClip, currentTime]);
 
@@ -523,6 +531,7 @@ const MediaPanel = () => {
   const purchasedTitles = purchases.filter(p => p.category === 'titles');
   const purchasedAudio = purchases.filter(p => p.category === 'audio');
   const purchasedFeatures = purchases.filter(p => p.category === 'features');
+  const purchasedTemplates = purchases.filter(p => p.category === 'templates');
 
   return (
     <div className="flex flex-col h-full editor-panel rounded-lg overflow-hidden">
@@ -727,17 +736,37 @@ const MediaPanel = () => {
                 <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-1 flex items-center gap-1">
                   <Icon name="Cpu" size={10} className="text-yellow-400" /> Расширения
                 </div>
-                <div className="space-y-0.5">
+                <div className="space-y-1">
                   {purchasedFeatures.map(p => (
-                    <div key={p.slug} className="flex items-center gap-2 px-2 py-1.5 rounded bg-yellow-500/5">
-                      <Icon name={p.icon || 'Cpu'} size={12} className="text-yellow-400" />
-                      <div>
-                        <div className="text-xs font-medium">{p.name}</div>
-                        <div className="text-[9px] text-muted-foreground">Активировано</div>
+                    <div key={p.slug} className="rounded bg-yellow-500/5 overflow-hidden">
+                      <div className="flex items-center gap-2 px-2 py-1.5">
+                        <Icon name={p.icon || 'Cpu'} size={12} className="text-yellow-400" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium">{p.name}</div>
+                        </div>
+                        <Icon name="CheckCircle" size={10} className="text-green-400 shrink-0" />
                       </div>
-                      <Icon name="CheckCircle" size={10} className="ml-auto text-green-400" />
+                      {p.features.length > 0 && (
+                        <div className="px-2 pb-1.5 space-y-0.5">
+                          {p.features.map((f, i) => (
+                            <div key={i} className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
+                              <Icon name="Check" size={8} className="text-green-400/60 shrink-0" />
+                              <span>{f}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {purchasedEffects.length === 0 && purchasedFeatures.length === 0 && isAuthenticated && purchasesLoaded && (
+              <div className="mt-2 p-3 rounded-lg bg-secondary/30 text-center">
+                <Icon name="Store" size={20} className="text-muted-foreground mx-auto mb-1.5" />
+                <div className="text-[10px] text-muted-foreground">
+                  PRO-эффекты, LUT-фильтры и расширения в магазине
                 </div>
               </div>
             )}
@@ -796,6 +825,15 @@ const MediaPanel = () => {
                 ))}
               </div>
             )}
+
+            {purchasedTransitions.length === 0 && isAuthenticated && purchasesLoaded && (
+              <div className="mt-3 p-3 rounded-lg bg-secondary/30 text-center">
+                <Icon name="Store" size={20} className="text-muted-foreground mx-auto mb-1.5" />
+                <div className="text-[10px] text-muted-foreground">
+                  PRO-переходы (глитч, вспышка, волна и др.) в магазине
+                </div>
+              </div>
+            )}
           </ScrollArea>
         </TabsContent>
 
@@ -850,18 +888,79 @@ const MediaPanel = () => {
               {purchasedAudio.length > 0 && (
                 <div className="mt-3">
                   <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-1 flex items-center gap-1">
-                    <Icon name="Music" size={10} className="text-green-400" /> Музыка (магазин)
+                    <Icon name="Music" size={10} className="text-green-400" /> Аудио (магазин)
                   </div>
                   {purchasedAudio.map(p => (
-                    <div key={p.slug} className="flex items-center gap-2 px-2 py-1.5 rounded bg-green-500/5">
-                      <Icon name={p.icon || 'Music'} size={12} className="text-green-400" />
-                      <div>
-                        <div className="text-xs font-medium">{p.name}</div>
-                        <div className="text-[9px] text-muted-foreground">{p.features.length} элементов</div>
+                    <div key={p.slug} className="mb-2">
+                      <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-green-500/5">
+                        <Icon name={p.icon || 'Music'} size={12} className="text-green-400" />
+                        <span className="text-xs font-medium">{p.name}</span>
+                        <span className="ml-auto text-[8px] text-green-400">PRO</span>
                       </div>
-                      <Icon name="CheckCircle" size={10} className="ml-auto text-green-400" />
+                      {p.features.length > 0 && (
+                        <div className="space-y-0.5 mt-1">
+                          {p.features.map((f, i) => (
+                            <div
+                              key={i}
+                              onClick={() => {
+                                const trackId = getCompatibleTrack('audio');
+                                addClip(trackId, {
+                                  type: 'audio',
+                                  startTime: currentTime,
+                                  duration: p.slug === 'pack-sound-fx' ? 2 : 30,
+                                  name: f,
+                                });
+                              }}
+                              className="flex items-center gap-2 p-1.5 rounded hover:bg-green-500/10 cursor-pointer transition-colors"
+                            >
+                              <Icon name={p.slug === 'pack-sound-fx' ? 'Volume2' : 'Music'} size={10} className="text-green-400/60" />
+                              <span className="text-[10px]">{f}</span>
+                              <Icon name="Plus" size={8} className="ml-auto text-muted-foreground" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
+                </div>
+              )}
+
+              {purchasedTemplates.length > 0 && (
+                <div className="mt-3">
+                  <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-1 flex items-center gap-1">
+                    <Icon name="Layout" size={10} className="text-pink-400" /> Шаблоны (магазин)
+                  </div>
+                  {purchasedTemplates.map(p => (
+                    <div key={p.slug} className="mb-2">
+                      <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-pink-500/5">
+                        <Icon name={p.icon || 'Layout'} size={12} className="text-pink-400" />
+                        <span className="text-xs font-medium">{p.name}</span>
+                        <span className="ml-auto text-[8px] text-pink-400">PRO</span>
+                      </div>
+                      {p.features.length > 0 && (
+                        <div className="space-y-0.5 mt-1">
+                          {p.features.map((f, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center gap-2 p-1.5 rounded bg-pink-500/5"
+                            >
+                              <Icon name="CheckCircle" size={10} className="text-pink-400/60" />
+                              <span className="text-[10px] text-muted-foreground">{f}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {purchases.length === 0 && isAuthenticated && purchasesLoaded && (
+                <div className="mt-4 p-3 rounded-lg bg-secondary/30 text-center">
+                  <Icon name="Store" size={20} className="text-muted-foreground mx-auto mb-1.5" />
+                  <div className="text-[10px] text-muted-foreground">
+                    В магазине есть PRO-титры, музыка и шаблоны
+                  </div>
                 </div>
               )}
             </div>
