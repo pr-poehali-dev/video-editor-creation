@@ -76,7 +76,7 @@ const formats: Array<{ value: ExportSettings['format']; label: string; desc: str
 ];
 
 const ExportPanel = () => {
-  const { exportSettings, setExportSettings, project, tracks, assets } = useEditorStore();
+  const { exportSettings, setExportSettings, project, tracks, assets, purchasedFeatureSlugs } = useEditorStore();
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStage, setExportStage] = useState('');
@@ -89,20 +89,34 @@ const ExportPanel = () => {
   const [activePreset, setActivePreset] = useState('social');
   const [assetDetails, setAssetDetails] = useState<AssetLoadDetail[]>([]);
   const [showErrorLog, setShowErrorLog] = useState(false);
+  const [lockMessage, setLockMessage] = useState('');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rendererRef = useRef<any>(null);
+
+  const has4K = purchasedFeatureSlugs.includes('feature-4k-export');
 
   const clipCount = tracks.reduce((sum, t) => sum + t.clips.length, 0);
 
   const selectPreset = useCallback((preset: ExportPreset) => {
+    if (preset.id === 'maxquality' && !has4K) {
+      setLockMessage('Для экспорта в 4K нужно расширение «Экспорт 4K» из магазина');
+      setTimeout(() => setLockMessage(''), 3000);
+      return;
+    }
+    setLockMessage('');
     setActivePreset(preset.id);
     if (preset.id !== 'custom' && Object.keys(preset.settings).length > 0) {
       setExportSettings(preset.settings);
     }
-  }, [setExportSettings]);
+  }, [setExportSettings, has4K]);
 
   const handleExport = useCallback(async () => {
     if (clipCount === 0) return;
+    if (exportSettings.quality === 'ultra' && !has4K) {
+      setLockMessage('Для экспорта в 4K нужно расширение «Экспорт 4K» из магазина');
+      setTimeout(() => setLockMessage(''), 3000);
+      return;
+    }
 
     setIsExporting(true);
     setExportProgress(0);
@@ -166,7 +180,7 @@ const ExportPanel = () => {
     }
 
     setIsExporting(false);
-  }, [tracks, assets, exportSettings, clipCount]);
+  }, [tracks, assets, exportSettings, clipCount, has4K]);
 
   const handleCancel = useCallback(() => {
     if (rendererRef.current) {
@@ -379,24 +393,42 @@ const ExportPanel = () => {
                 </div>
               )}
 
+              {lockMessage && (
+                <div className="flex items-center gap-2 p-2 rounded bg-yellow-500/15 border border-yellow-500/30 text-yellow-400">
+                  <Icon name="Lock" size={14} className="shrink-0" />
+                  <span className="text-[10px]">{lockMessage}</span>
+                </div>
+              )}
+
               <div>
                 <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Для чего экспортируем?</Label>
                 <div className="grid grid-cols-1 gap-1 mt-1.5">
-                  {presets.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => selectPreset(p)}
-                      className={`flex items-center gap-2.5 p-2 rounded text-left transition-colors ${activePreset === p.id ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 hover:bg-secondary'}`}
-                    >
-                      <div className={`w-8 h-8 rounded flex items-center justify-center flex-shrink-0 ${activePreset === p.id ? 'bg-primary-foreground/15' : 'bg-background/50'}`}>
-                        <Icon name={p.icon} size={16} />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium">{p.label}</div>
-                        <div className={`text-[9px] truncate ${activePreset === p.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{p.desc}</div>
-                      </div>
-                    </button>
-                  ))}
+                  {presets.map(p => {
+                    const locked = p.id === 'maxquality' && !has4K;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => selectPreset(p)}
+                        className={`flex items-center gap-2.5 p-2 rounded text-left transition-colors ${activePreset === p.id ? 'bg-primary text-primary-foreground' : locked ? 'bg-secondary/30 hover:bg-secondary/40' : 'bg-secondary/50 hover:bg-secondary'}`}
+                      >
+                        <div className={`w-8 h-8 rounded flex items-center justify-center flex-shrink-0 relative ${activePreset === p.id ? 'bg-primary-foreground/15' : 'bg-background/50'}`}>
+                          <Icon name={p.icon} size={16} />
+                          {locked && (
+                            <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-yellow-500/90 flex items-center justify-center">
+                              <Icon name="Lock" size={8} className="text-yellow-950" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-medium flex items-center gap-1">
+                            {p.label}
+                            {locked && <span className="text-[8px] text-yellow-400 font-normal">PRO</span>}
+                          </div>
+                          <div className={`text-[9px] truncate ${activePreset === p.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>{p.desc}</div>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -450,16 +482,29 @@ const ExportPanel = () => {
                     <div>
                       <Label className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Качество</Label>
                       <div className="grid grid-cols-2 gap-1 mt-1">
-                        {qualities.map(q => (
-                          <button
-                            key={q.value}
-                            onClick={() => setExportSettings({ quality: q.value, resolution: q.resolution })}
-                            className={`p-2 rounded text-left transition-colors ${exportSettings.quality === q.value ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 hover:bg-secondary'}`}
-                          >
-                            <div className="text-xs font-medium">{q.label}</div>
-                            <div className="text-[9px] opacity-70">{q.desc}</div>
-                          </button>
-                        ))}
+                        {qualities.map(q => {
+                          const locked = q.value === 'ultra' && !has4K;
+                          return (
+                            <button
+                              key={q.value}
+                              onClick={() => {
+                                if (locked) {
+                                  setLockMessage('Для экспорта в 4K нужно расширение «Экспорт 4K» из магазина');
+                                  setTimeout(() => setLockMessage(''), 3000);
+                                  return;
+                                }
+                                setExportSettings({ quality: q.value, resolution: q.resolution });
+                              }}
+                              className={`p-2 rounded text-left transition-colors relative ${exportSettings.quality === q.value ? 'bg-primary text-primary-foreground' : locked ? 'bg-secondary/30 hover:bg-secondary/40' : 'bg-secondary/50 hover:bg-secondary'}`}
+                            >
+                              <div className="text-xs font-medium flex items-center gap-1">
+                                {q.label}
+                                {locked && <Icon name="Lock" size={9} className="text-yellow-400" />}
+                              </div>
+                              <div className="text-[9px] opacity-70">{q.desc}</div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   )}

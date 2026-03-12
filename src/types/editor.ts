@@ -41,6 +41,7 @@ export interface TimelineClip {
   scale?: number;
   rotation?: number;
   fitMode?: 'contain' | 'cover' | 'fill';
+  speedRampPreset?: string;
   filters: ClipFilter[];
   transition?: ClipTransition;
   keyframes: Keyframe[];

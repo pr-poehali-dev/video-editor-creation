@@ -89,6 +89,8 @@ const getFilterStyle = (filters: ActiveClip['filters'], previewFilter?: string |
       case 'Виньетка Pro': break;
       case 'Двойная экспозиция': parts.push('brightness(1.2) contrast(0.85)'); break;
       case 'Глитч-наложение': parts.push(`hue-rotate(${norm * 120}deg) saturate(${1.8 + norm}) contrast(1.15)`); break;
+      case 'chromaKey': parts.push('saturate(1.1) contrast(1.05)'); break;
+      case 'Хромакей': parts.push('saturate(1.1) contrast(1.05)'); break;
       case 'Зелёный экран': break;
       case 'Синий экран': break;
       default: parts.push(`saturate(${1 + norm * 0.3}) contrast(${1 + norm * 0.1})`); break;
@@ -435,6 +437,7 @@ const PreviewPanel = () => {
 
   const renderMediaClip = (clip: ActiveClip, i: number) => {
     const hasUrl = !!clip.assetUrl;
+    const hasChromaKey = clip.filters?.some(f => f.type === 'chromaKey');
 
     if (clip.type === 'image' && hasUrl) {
       if (loadErrors.has(clip.id)) {
@@ -486,6 +489,12 @@ const PreviewPanel = () => {
                 <div className="absolute bottom-0 left-0 w-2.5 h-2.5 bg-primary rounded-tr-sm" />
                 <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-primary rounded-tl-sm" />
               </>
+            )}
+            {hasChromaKey && (
+              <div
+                className="absolute inset-1 pointer-events-none rounded"
+                style={{ border: '2px dashed #00ff00', boxShadow: 'inset 0 0 12px rgba(0,255,0,0.15)' }}
+              />
             )}
           </div>
         </div>
@@ -550,6 +559,12 @@ const PreviewPanel = () => {
                 <div className="absolute bottom-0 left-0 w-2.5 h-2.5 bg-primary rounded-tr-sm" />
                 <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-primary rounded-tl-sm" />
               </>
+            )}
+            {hasChromaKey && (
+              <div
+                className="absolute inset-1 pointer-events-none rounded"
+                style={{ border: '2px dashed #00ff00', boxShadow: 'inset 0 0 12px rgba(0,255,0,0.15)' }}
+              />
             )}
           </div>
         </div>

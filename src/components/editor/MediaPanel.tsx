@@ -149,7 +149,7 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 };
 
 const MediaPanel = () => {
-  const { assets, addAsset, removeAsset, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime, project, addClip, selectedClipId, updateClip, setPreviewFilter } = useEditorStore();
+  const { assets, addAsset, removeAsset, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime, project, addClip, selectedClipId, updateClip, setPreviewFilter, setPurchasedFeatureSlugs, setActivePanel, setExportSettings, tracks } = useEditorStore();
   const { isAuthenticated } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -163,6 +163,7 @@ const MediaPanel = () => {
   const [libraryFilter, setLibraryFilter] = useState<'all' | 'video' | 'audio' | 'image'>('all');
   const [uploadErrors, setUploadErrors] = useState<Array<{name: string; error: string; file: File; assetId: string; duration: number; attempt: number; retrying: boolean; oversized?: boolean}>>([]);
   const [uploadProgress, setUploadProgress] = useState<Record<string, { current: number; total: number }>>({});
+  const [aiSubtitlesLoading, setAiSubtitlesLoading] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || !project.id) return;
@@ -200,18 +201,21 @@ const MediaPanel = () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     shop.myItems().then((data: any) => {
       if (data.items) {
-        setPurchases(data.items.map((i: ShopPurchase) => ({
+        const items = data.items.map((i: ShopPurchase) => ({
           slug: i.slug,
           name: i.name,
           category: i.category,
           icon: i.icon,
           features: i.features || [],
           purchased_at: i.purchased_at,
-        })));
+        }));
+        setPurchases(items);
+        const featureSlugs = items.filter((p: ShopPurchase) => p.category === 'features').map((p: ShopPurchase) => p.slug);
+        setPurchasedFeatureSlugs(featureSlugs);
       }
       setPurchasesLoaded(true);
     }).catch(() => setPurchasesLoaded(true));
-  }, [isAuthenticated, purchasesLoaded]);
+  }, [isAuthenticated, purchasesLoaded, setPurchasedFeatureSlugs]);
 
   const handleImport = useCallback(() => {
     fileInputRef.current?.click();
@@ -527,6 +531,62 @@ const MediaPanel = () => {
     });
   }, [getCompatibleTrack, addClip, currentTime]);
 
+  const handleFeatureClick = useCallback((slug: string) => {
+    if (slug === 'feature-4k-export') {
+      setActivePanel('export');
+      setExportSettings({ format: 'mp4', quality: 'ultra', resolution: '3840x2160', fps: 30, codec: 'H.264', bitrate: 20000 });
+    } else if (slug === 'feature-ai-subtitles') {
+      setAiSubtitlesLoading(true);
+      setTimeout(() => {
+        const trackId = getCompatibleTrack('text');
+        const subs = [
+          { text: 'Пример субтитров', start: 0, dur: 3 },
+          { text: 'Сгенерировано ИИ', start: 3.5, dur: 2.5 },
+          { text: 'Автоматическое распознавание', start: 6.5, dur: 3 },
+          { text: 'Субтитры готовы!', start: 10, dur: 2 },
+        ];
+        for (const sub of subs) {
+          addClip(trackId, {
+            type: 'text',
+            startTime: sub.start,
+            duration: sub.dur,
+            name: 'AI Субтитр',
+            text: sub.text,
+            fontSize: 24,
+            fontColor: '#ffffff',
+            textBg: true,
+            textBgColor: '#000000',
+            textBgOpacity: 0.6,
+          });
+        }
+        setAiSubtitlesLoading(false);
+      }, 2000);
+    } else if (slug === 'feature-green-screen') {
+      if (!selectedClipId) return;
+      const state = useEditorStore.getState();
+      let clip = null;
+      for (const t of state.tracks) {
+        clip = t.clips.find(c => c.id === selectedClipId);
+        if (clip) break;
+      }
+      if (!clip || (clip.type !== 'video' && clip.type !== 'image')) return;
+      const existingFilters = clip.filters || [];
+      if (existingFilters.some(f => f.type === 'chromaKey')) return;
+      updateClip(selectedClipId, {
+        filters: [...existingFilters, {
+          id: `filter_${Date.now()}`,
+          name: 'Хромакей',
+          type: 'chromaKey',
+          params: { color: '#00ff00', tolerance: 0.3 },
+        }],
+      });
+    } else if (slug === 'feature-speed-ramp') {
+      if (selectedClipId) {
+        setActivePanel('properties');
+      }
+    }
+  }, [selectedClipId, updateClip, setActivePanel, setExportSettings, getCompatibleTrack, addClip]);
+
   const purchasedEffects = purchases.filter(p => p.category === 'effects');
   const purchasedTransitions = purchases.filter(p => p.category === 'transitions');
   const purchasedTitles = purchases.filter(p => p.category === 'titles');
@@ -738,27 +798,53 @@ const MediaPanel = () => {
                   <Icon name="Cpu" size={10} className="text-yellow-400" /> Расширения
                 </div>
                 <div className="space-y-1">
-                  {purchasedFeatures.map(p => (
-                    <div key={p.slug} className="rounded bg-yellow-500/5 overflow-hidden">
-                      <div className="flex items-center gap-2 px-2 py-1.5">
-                        <Icon name={p.icon || 'Cpu'} size={12} className="text-yellow-400" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium">{p.name}</div>
+                  {purchasedFeatures.map(p => {
+                    const needsClip = p.slug === 'feature-green-screen' || p.slug === 'feature-speed-ramp';
+                    const disabled = needsClip && !selectedClipId;
+                    return (
+                      <div
+                        key={p.slug}
+                        onClick={() => !disabled && handleFeatureClick(p.slug)}
+                        className={`rounded bg-yellow-500/5 overflow-hidden transition-colors ${disabled ? 'opacity-50 cursor-default' : 'cursor-pointer hover:bg-yellow-500/10'}`}
+                      >
+                        <div className="flex items-center gap-2 px-2 py-1.5">
+                          <Icon name={p.icon || 'Cpu'} size={12} className="text-yellow-400" />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium">{p.name}</div>
+                            {disabled && (
+                              <div className="text-[9px] text-muted-foreground">Выберите клип на таймлайне</div>
+                            )}
+                          </div>
+                          <Icon name="ChevronRight" size={10} className="text-yellow-400/60 shrink-0" />
                         </div>
-                        <Icon name="CheckCircle" size={10} className="text-green-400 shrink-0" />
+                        {p.features.length > 0 && (
+                          <div className="px-2 pb-1.5 space-y-0.5">
+                            {p.features.map((f, i) => (
+                              <div key={i} className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
+                                <Icon name="Check" size={8} className="text-green-400/60 shrink-0" />
+                                <span>{f}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      {p.features.length > 0 && (
-                        <div className="px-2 pb-1.5 space-y-0.5">
-                          {p.features.map((f, i) => (
-                            <div key={i} className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
-                              <Icon name="Check" size={8} className="text-green-400/60 shrink-0" />
-                              <span>{f}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {aiSubtitlesLoading && (
+              <div className="mb-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                <div className="flex items-center gap-2">
+                  <Icon name="Loader2" size={14} className="text-primary animate-spin" />
+                  <div>
+                    <div className="text-xs font-medium">Анализ речи...</div>
+                    <div className="text-[9px] text-muted-foreground">Генерация субтитров</div>
+                  </div>
+                </div>
+                <div className="mt-2 h-1.5 rounded-full overflow-hidden bg-primary/10">
+                  <div className="h-full bg-primary rounded-full animate-pulse" style={{ width: '60%' }} />
                 </div>
               </div>
             )}

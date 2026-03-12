@@ -28,6 +28,7 @@ const Index = () => {
 
   useEffect(() => {
     if (activePanel === 'export') setRightPanel('export');
+    if (activePanel === 'properties') setRightPanel('properties');
   }, [activePanel]);
 
   useEffect(() => {

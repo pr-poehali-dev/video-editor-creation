@@ -39,6 +39,8 @@ interface EditorStore extends EditorState {
   setDraggingAsset: (asset: MediaAsset | null) => void;
   previewFilter: string | null;
   setPreviewFilter: (filter: string | null) => void;
+  purchasedFeatureSlugs: string[];
+  setPurchasedFeatureSlugs: (slugs: string[]) => void;
   setProject: (project: Partial<EditorState['project']>) => void;
   resetEditor: (projectId?: number, projectName?: string) => void;
   getProjectData: () => { tracks: Track[]; project: EditorState['project']; exportSettings: EditorState['exportSettings']; assets: MediaAsset[] };
@@ -65,10 +67,13 @@ const useEditorStore = create<EditorStore>((set, get) => ({
   exportSettings: { format: 'mp4', quality: 'high', resolution: '1920x1080', fps: 30, codec: 'H.264', bitrate: 8000 },
   draggingAsset: null,
   previewFilter: null,
+  purchasedFeatureSlugs: [],
 
   setDraggingAsset: (asset) => set({ draggingAsset: asset }),
 
   setPreviewFilter: (filter) => set({ previewFilter: filter }),
+
+  setPurchasedFeatureSlugs: (slugs) => set({ purchasedFeatureSlugs: slugs }),
 
   selectTrack: (trackId) => set({ selectedTrackId: trackId }),
 

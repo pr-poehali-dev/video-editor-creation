@@ -9,8 +9,15 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { getFontList, ensureFontLoaded } from '@/lib/google-fonts';
 
+const speedRampPresets = [
+  { id: 'smooth-start', label: 'Плавный старт', path: 'M 0 80 C 30 80 40 20 100 20' },
+  { id: 'smooth-slow', label: 'Плавное замедление', path: 'M 0 20 C 60 20 70 80 100 80' },
+  { id: 'ease-in-out', label: 'Ускорение-замедление', path: 'M 0 80 C 25 80 25 20 50 20 C 75 20 75 80 100 80' },
+  { id: 'freeze', label: 'Стоп-кадр', path: 'M 0 40 L 30 40 L 30 85 L 70 85 L 70 40 L 100 40' },
+];
+
 const PropertiesPanel = () => {
-  const { tracks, selectedClipId, updateClip, removeClip, duplicateClip, splitClip, currentTime } = useEditorStore();
+  const { tracks, selectedClipId, updateClip, removeClip, duplicateClip, splitClip, currentTime, purchasedFeatureSlugs } = useEditorStore();
   const [fontPickerOpen, setFontPickerOpen] = useState(false);
   const [fontSearch, setFontSearch] = useState('');
 
@@ -135,6 +142,49 @@ const PropertiesPanel = () => {
               />
             </div>
           </div>
+
+          {purchasedFeatureSlugs.includes('feature-speed-ramp') && (selectedClip.type === 'video' || selectedClip.type === 'audio') && (
+            <>
+              <Separator className="bg-border/50" />
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Icon name="Activity" size={10} className="text-yellow-400" />
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Скоростная рампа</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {speedRampPresets.map(preset => (
+                    <button
+                      key={preset.id}
+                      onClick={() => updateClip(selectedClip.id, { speedRampPreset: selectedClip.speedRampPreset === preset.id ? undefined : preset.id })}
+                      className={`flex flex-col items-center gap-1.5 p-2 rounded transition-colors ${
+                        selectedClip.speedRampPreset === preset.id
+                          ? 'bg-yellow-500/20 border border-yellow-500/40'
+                          : 'bg-secondary/50 hover:bg-secondary border border-transparent'
+                      }`}
+                    >
+                      <svg width="48" height="28" viewBox="0 0 100 100" fill="none" className="opacity-80">
+                        <path d={preset.path} stroke={selectedClip.speedRampPreset === preset.id ? '#eab308' : '#888'} strokeWidth="4" fill="none" />
+                        <line x1="0" y1="95" x2="100" y2="95" stroke="#333" strokeWidth="1" />
+                      </svg>
+                      <span className="text-[8px] text-center leading-tight">{preset.label}</span>
+                    </button>
+                  ))}
+                </div>
+                {selectedClip.speedRampPreset && (
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-yellow-500/10 text-[9px] text-yellow-400">
+                    <Icon name="Activity" size={9} />
+                    <span>Активна: {speedRampPresets.find(p => p.id === selectedClip.speedRampPreset)?.label}</span>
+                    <button
+                      onClick={() => updateClip(selectedClip.id, { speedRampPreset: undefined })}
+                      className="ml-auto hover:text-yellow-300"
+                    >
+                      <Icon name="X" size={9} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           {(selectedClip.type === 'image' || selectedClip.type === 'video') && (
             <>
