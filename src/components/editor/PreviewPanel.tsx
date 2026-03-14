@@ -36,6 +36,8 @@ interface ActiveClip {
   textBg?: boolean;
   textBgColor?: string;
   textBgOpacity?: number;
+  textWidth?: number;
+  textAlign?: 'left' | 'center' | 'right';
   textAnimation?: 'none' | 'fade' | 'typewriter' | 'slide-up' | 'slide-down' | 'scale';
   textAnimationPerLine?: boolean;
   textAnimationDuration?: number;
@@ -129,7 +131,7 @@ const PreviewPanel = () => {
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
   const scrubbing = useRef(false);
   const progressBarRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<{ clipId: string; startMouseX: number; startMouseY: number; startPosX: number; startPosY: number } | null>(null);
+  const dragRef = useRef<{ clipId: string; startMouseX: number; startMouseY: number; startPosX: number; startPosY: number; mode?: 'move' | 'resize'; startWidth?: number; side?: 'left' | 'right' } | null>(null);
 
   const assetMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -199,6 +201,8 @@ const PreviewPanel = () => {
             textBg: clip.textBg,
             textBgColor: clip.textBgColor,
             textBgOpacity: clip.textBgOpacity,
+            textWidth: clip.textWidth,
+            textAlign: clip.textAlign,
             textAnimation: clip.textAnimation,
             textAnimationPerLine: clip.textAnimationPerLine,
             textAnimationDuration: clip.textAnimationDuration,
@@ -416,6 +420,7 @@ const PreviewPanel = () => {
       startMouseY: e.clientY,
       startPosX: clip.positionX ?? 50,
       startPosY: clip.positionY ?? 50,
+      mode: 'move',
     };
     setIsDragging(true);
 
@@ -424,12 +429,61 @@ const PreviewPanel = () => {
       const rect = canvasRef.current.getBoundingClientRect();
       const dx = ev.clientX - dragRef.current.startMouseX;
       const dy = ev.clientY - dragRef.current.startMouseY;
-      const newX = dragRef.current.startPosX + (dx / rect.width) * 100;
-      const newY = dragRef.current.startPosY + (dy / rect.height) * 100;
-      updateClip(dragRef.current.clipId, {
-        positionX: Math.round(newX * 10) / 10,
-        positionY: Math.round(newY * 10) / 10,
-      });
+      if (dragRef.current.mode === 'resize') {
+        const dxPct = (dx / rect.width) * 100;
+        const startW = dragRef.current.startWidth ?? 50;
+        const side = dragRef.current.side;
+        const delta = side === 'left' ? -dxPct * 2 : dxPct * 2;
+        const newW = Math.max(10, Math.min(100, Math.round(startW + delta)));
+        updateClip(dragRef.current.clipId, { textWidth: newW });
+      } else {
+        const newX = dragRef.current.startPosX + (dx / rect.width) * 100;
+        const newY = dragRef.current.startPosY + (dy / rect.height) * 100;
+        updateClip(dragRef.current.clipId, {
+          positionX: Math.round(newX * 10) / 10,
+          positionY: Math.round(newY * 10) / 10,
+        });
+      }
+    };
+
+    const onUp = () => {
+      dragRef.current = null;
+      setIsDragging(false);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [activeClips, selectClip, updateClip]);
+
+  const handleResizeStart = useCallback((clipId: string, side: 'left' | 'right', e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const clip = activeClips.find(c => c.id === clipId);
+    if (!clip || clip.type !== 'text') return;
+    selectClip(clipId);
+    dragRef.current = {
+      clipId,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      startPosX: clip.positionX ?? 50,
+      startPosY: clip.positionY ?? 50,
+      mode: 'resize',
+      startWidth: clip.textWidth ?? 50,
+      side,
+    };
+    setIsDragging(true);
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current || !canvasRef.current) return;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const dx = ev.clientX - dragRef.current.startMouseX;
+      const dxPct = (dx / rect.width) * 100;
+      const startW = dragRef.current.startWidth ?? 50;
+      const delta = dragRef.current.side === 'left' ? -dxPct * 2 : dxPct * 2;
+      const newW = Math.max(10, Math.min(100, Math.round(startW + delta)));
+      updateClip(dragRef.current.clipId, { textWidth: newW });
     };
 
     const onUp = () => {
@@ -693,6 +747,24 @@ const PreviewPanel = () => {
                     }}
                     onMouseDown={e => handleDragStart(clip.id, e)}
                   >
+                    {selectedClipId === clip.id && (
+                      <>
+                        <div
+                          className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize z-10 group"
+                          style={{ transform: 'translateX(-100%)' }}
+                          onMouseDown={e => handleResizeStart(clip.id, 'left', e)}
+                        >
+                          <div className="absolute inset-y-1 left-0 w-1 rounded-full bg-cyan-400/70 group-hover:bg-cyan-400 transition-colors" />
+                        </div>
+                        <div
+                          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize z-10 group"
+                          style={{ transform: 'translateX(100%)' }}
+                          onMouseDown={e => handleResizeStart(clip.id, 'right', e)}
+                        >
+                          <div className="absolute inset-y-1 right-0 w-1 rounded-full bg-cyan-400/70 group-hover:bg-cyan-400 transition-colors" />
+                        </div>
+                      </>
+                    )}
                     {perLine && anim !== 'none' ? (
                       <div className="flex flex-col gap-0.5 relative" style={{ alignItems: textAl === 'left' ? 'flex-start' : textAl === 'right' ? 'flex-end' : 'center' }}>
                         {clip.textBg && (
@@ -776,7 +848,9 @@ const PreviewPanel = () => {
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[200] bg-black/80 text-white text-[10px] font-mono px-2 py-1 rounded pointer-events-none">
               {(() => {
                 const c = activeClips.find(a => a.id === selectedClipId);
-                return c ? `X: ${(c.positionX ?? 50).toFixed(1)}  Y: ${(c.positionY ?? 50).toFixed(1)}` : '';
+                if (!c) return '';
+                if (dragRef.current?.mode === 'resize') return `Ширина: ${c.textWidth ?? 'Авто'}%`;
+                return `X: ${(c.positionX ?? 50).toFixed(1)}  Y: ${(c.positionY ?? 50).toFixed(1)}`;
               })()}
             </div>
           )}
