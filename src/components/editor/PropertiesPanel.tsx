@@ -478,6 +478,70 @@ const PropertiesPanel = () => {
               <Separator className="bg-border/50" />
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
+                  <Icon name="Move" size={10} className="text-blue-400" />
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Позиция</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1">
+                  {([
+                    [15, 15, '↖'],
+                    [50, 12, '↑'],
+                    [85, 15, '↗'],
+                    [15, 50, '←'],
+                    [50, 50, '•'],
+                    [85, 50, '→'],
+                    [15, 85, '↙'],
+                    [50, 88, '↓'],
+                    [85, 85, '↘'],
+                  ] as [number, number, string][]).map(([px, py, label], idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => updateClip(selectedClip.id, { positionX: px, positionY: py })}
+                      className={`flex items-center justify-center h-6 rounded text-[10px] transition-colors ${
+                        Math.abs((selectedClip.positionX ?? 50) - px) < 5 && Math.abs((selectedClip.positionY ?? 50) - py) < 5
+                          ? 'bg-blue-500/20 border border-blue-500/40 text-blue-300'
+                          : 'bg-secondary/50 hover:bg-secondary border border-transparent text-muted-foreground'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">X</Label>
+                    <Input
+                      type="number"
+                      value={selectedClip.positionX ?? 50}
+                      onChange={e => updateClip(selectedClip.id, { positionX: parseFloat(e.target.value) || 0 })}
+                      min="-50"
+                      max="150"
+                      className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-muted-foreground">Y</Label>
+                    <Input
+                      type="number"
+                      value={selectedClip.positionY ?? 50}
+                      onChange={e => updateClip(selectedClip.id, { positionY: parseFloat(e.target.value) || 0 })}
+                      min="-50"
+                      max="150"
+                      className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-blue-500/10 text-[9px] text-blue-300">
+                  <Icon name="Info" size={9} />
+                  <span>Перетаскивай текст прямо на превью</span>
+                </div>
+              </div>
+
+              <Separator className="bg-border/50" />
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
                   <Icon name="Sparkles" size={10} className="text-purple-400" />
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Анимация появления</span>
                 </div>

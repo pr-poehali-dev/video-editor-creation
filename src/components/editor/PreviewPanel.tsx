@@ -408,14 +408,14 @@ const PreviewPanel = () => {
     e.preventDefault();
     e.stopPropagation();
     const clip = activeClips.find(c => c.id === clipId);
-    if (!clip || (clip.type !== 'image' && clip.type !== 'video')) return;
+    if (!clip || (clip.type !== 'image' && clip.type !== 'video' && clip.type !== 'text')) return;
     selectClip(clipId);
     dragRef.current = {
       clipId,
       startMouseX: e.clientX,
       startMouseY: e.clientY,
-      startPosX: clip.positionX,
-      startPosY: clip.positionY,
+      startPosX: clip.positionX ?? 50,
+      startPosY: clip.positionY ?? 50,
     };
     setIsDragging(true);
 
@@ -673,11 +673,21 @@ const PreviewPanel = () => {
                   }
                 };
 
+                const posX = clip.positionX ?? 50;
+                const posY = clip.positionY ?? 50;
+
                 return (
                   <div
                     key={clip.id}
-                    className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                    style={{ zIndex: 100 + i }}
+                    className={`absolute cursor-grab active:cursor-grabbing ${selectedClipId === clip.id ? 'ring-1 ring-purple-400/60 ring-offset-0' : ''}`}
+                    style={{
+                      zIndex: 100 + i,
+                      left: `${posX}%`,
+                      top: `${posY}%`,
+                      transform: 'translate(-50%, -50%)',
+                      maxWidth: '90%',
+                    }}
+                    onMouseDown={e => handleDragStart(clip.id, e)}
                   >
                     {perLine && anim !== 'none' ? (
                       <div className="flex flex-col items-center gap-0.5 relative">
@@ -760,7 +770,7 @@ const PreviewPanel = () => {
             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[200] bg-black/80 text-white text-[10px] font-mono px-2 py-1 rounded pointer-events-none">
               {(() => {
                 const c = activeClips.find(a => a.id === selectedClipId);
-                return c ? `X: ${c.positionX.toFixed(1)}  Y: ${c.positionY.toFixed(1)}` : '';
+                return c ? `X: ${(c.positionX ?? 50).toFixed(1)}  Y: ${(c.positionY ?? 50).toFixed(1)}` : '';
               })()}
             </div>
           )}
