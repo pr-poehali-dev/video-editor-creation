@@ -675,6 +675,8 @@ const PreviewPanel = () => {
 
                 const posX = clip.positionX ?? 50;
                 const posY = clip.positionY ?? 50;
+                const textW = clip.textWidth;
+                const textAl = clip.textAlign || 'center';
 
                 return (
                   <div
@@ -685,12 +687,14 @@ const PreviewPanel = () => {
                       left: `${posX}%`,
                       top: `${posY}%`,
                       transform: 'translate(-50%, -50%)',
-                      maxWidth: '90%',
+                      width: textW ? `${textW}%` : undefined,
+                      maxWidth: '96%',
+                      textAlign: textAl,
                     }}
                     onMouseDown={e => handleDragStart(clip.id, e)}
                   >
                     {perLine && anim !== 'none' ? (
-                      <div className="flex flex-col items-center gap-0.5 relative">
+                      <div className="flex flex-col gap-0.5 relative" style={{ alignItems: textAl === 'left' ? 'flex-start' : textAl === 'right' ? 'flex-end' : 'center' }}>
                         {clip.textBg && (
                           <div
                             className="absolute inset-0 rounded px-3 py-1 -m-1"
@@ -713,7 +717,8 @@ const PreviewPanel = () => {
                               paintOrder: stroke > 0 ? 'stroke fill' : undefined,
                               position: 'relative',
                               display: 'block',
-                              whiteSpace: 'pre',
+                              whiteSpace: textW ? 'pre-wrap' : 'pre',
+                              wordBreak: textW ? 'break-word' : undefined,
                               ...getLineStyle(li),
                             }}
                           >
@@ -744,7 +749,8 @@ const PreviewPanel = () => {
                             WebkitTextStroke: stroke > 0 ? `${stroke}px ${strokeColor}` : undefined,
                             paintOrder: stroke > 0 ? 'stroke fill' : undefined,
                             position: 'relative',
-                            whiteSpace: 'pre-line',
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: textW ? 'break-word' : undefined,
                             ...getLineStyle(0),
                           }}
                         >

@@ -33,6 +33,8 @@ export interface TimelineClip {
   textBg?: boolean;
   textBgColor?: string;
   textBgOpacity?: number;
+  textWidth?: number;
+  textAlign?: 'left' | 'center' | 'right';
   textAnimation?: 'none' | 'fade' | 'typewriter' | 'slide-up' | 'slide-down' | 'scale';
   textAnimationPerLine?: boolean;
   textAnimationDuration?: number;

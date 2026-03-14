@@ -542,6 +542,88 @@ const PropertiesPanel = () => {
               <Separator className="bg-border/50" />
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">
+                  <Icon name="AlignHorizontalSpaceAround" size={10} className="text-cyan-400" />
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Текстовое поле</span>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] text-muted-foreground">Ширина</Label>
+                    <div className="flex items-center gap-1">
+                      {selectedClip.textWidth && (
+                        <button
+                          onClick={() => updateClip(selectedClip.id, { textWidth: undefined })}
+                          className="text-[9px] text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Авто
+                        </button>
+                      )}
+                      <span className="text-[10px] text-muted-foreground">{selectedClip.textWidth ? `${selectedClip.textWidth}%` : 'Авто'}</span>
+                    </div>
+                  </div>
+                  <Slider
+                    value={[selectedClip.textWidth ?? 0]}
+                    onValueChange={([v]) => updateClip(selectedClip.id, { textWidth: v === 0 ? undefined : v })}
+                    min={0}
+                    max={100}
+                    step={5}
+                    className="mt-1"
+                  />
+                  <div className="flex justify-between text-[8px] text-muted-foreground/50 mt-0.5">
+                    <span>Авто</span>
+                    <span>Вся ширина</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-1">
+                  {([
+                    [undefined, 'Авто', 'Shrink'],
+                    [33, '⅓', 'Columns2'],
+                    [50, '½', 'Columns2'],
+                    [80, '80%', 'Columns3'],
+                  ] as [number | undefined, string, string][]).map(([w, label, icon], idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => updateClip(selectedClip.id, { textWidth: w })}
+                      className={`flex flex-col items-center gap-0.5 py-1.5 px-1 rounded text-[8px] transition-colors ${
+                        (selectedClip.textWidth ?? undefined) === w
+                          ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-300'
+                          : 'bg-secondary/50 hover:bg-secondary border border-transparent text-muted-foreground'
+                      }`}
+                    >
+                      <Icon name={icon} size={11} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div>
+                  <Label className="text-[10px] text-muted-foreground">Выравнивание</Label>
+                  <div className="grid grid-cols-3 gap-1 mt-1">
+                    {([
+                      ['left', 'AlignLeft'],
+                      ['center', 'AlignCenter'],
+                      ['right', 'AlignRight'],
+                    ] as ['left' | 'center' | 'right', string][]).map(([align, icon]) => (
+                      <button
+                        key={align}
+                        onClick={() => updateClip(selectedClip.id, { textAlign: align })}
+                        className={`flex items-center justify-center h-6 rounded transition-colors ${
+                          (selectedClip.textAlign || 'center') === align
+                            ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-300'
+                            : 'bg-secondary/50 hover:bg-secondary border border-transparent text-muted-foreground'
+                        }`}
+                      >
+                        <Icon name={icon} size={12} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <Separator className="bg-border/50" />
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
                   <Icon name="Sparkles" size={10} className="text-purple-400" />
                   <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Анимация появления</span>
                 </div>
