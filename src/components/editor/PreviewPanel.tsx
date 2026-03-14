@@ -36,6 +36,10 @@ interface ActiveClip {
   textBg?: boolean;
   textBgColor?: string;
   textBgOpacity?: number;
+  textAnimation?: 'none' | 'fade' | 'typewriter' | 'slide-up' | 'slide-down' | 'scale';
+  textAnimationPerLine?: boolean;
+  textAnimationDuration?: number;
+  textAnimationDelay?: number;
   opacity: number;
   clipVolume: number;
   startTime: number;
@@ -195,6 +199,10 @@ const PreviewPanel = () => {
             textBg: clip.textBg,
             textBgColor: clip.textBgColor,
             textBgOpacity: clip.textBgOpacity,
+            textAnimation: clip.textAnimation,
+            textAnimationPerLine: clip.textAnimationPerLine,
+            textAnimationDuration: clip.textAnimationDuration,
+            textAnimationDelay: clip.textAnimationDelay,
             opacity: clip.opacity,
             clipVolume: clip.volume,
             startTime: clip.startTime,
@@ -634,38 +642,106 @@ const PreviewPanel = () => {
                 const fontSize = Math.max(12, (clip.fontSize || 48) * 0.35);
                 const shadowStyle = shadow > 0 ? `0 2px ${shadow}px rgba(0,0,0,0.7)` : 'none';
                 const fontFamily = ensureFontLoaded(clip.fontFamily);
+                const anim = clip.textAnimation || 'none';
+                const perLine = clip.textAnimationPerLine ?? false;
+                const animDur = clip.textAnimationDuration ?? 0.5;
+                const animDelay = clip.textAnimationDelay ?? 0.3;
+                const elapsed = currentTime - clip.startTime;
+                const fullText = clip.text || clip.name;
+                const lines = perLine ? fullText.split('\n').filter(l => l.length > 0) : [fullText];
+                if (lines.length === 0) lines.push(fullText);
+
+                const getLineStyle = (lineIdx: number): React.CSSProperties => {
+                  if (anim === 'none') return { opacity: clip.opacity };
+                  const lineStart = lineIdx * animDelay;
+                  const progress = Math.max(0, Math.min(1, (elapsed - lineStart) / animDur));
+                  const ease = progress * progress * (3 - 2 * progress);
+                  if (progress <= 0) return { opacity: 0 };
+                  switch (anim) {
+                    case 'fade':
+                      return { opacity: ease * clip.opacity, transition: 'none' };
+                    case 'typewriter':
+                      return { opacity: clip.opacity, clipPath: `inset(0 ${(1 - ease) * 100}% 0 0)`, transition: 'none' };
+                    case 'slide-up':
+                      return { opacity: ease * clip.opacity, transform: `translateY(${(1 - ease) * 20}px)`, transition: 'none' };
+                    case 'slide-down':
+                      return { opacity: ease * clip.opacity, transform: `translateY(${-(1 - ease) * 20}px)`, transition: 'none' };
+                    case 'scale':
+                      return { opacity: ease * clip.opacity, transform: `scale(${0.5 + 0.5 * ease})`, transition: 'none' };
+                    default:
+                      return { opacity: clip.opacity };
+                  }
+                };
+
                 return (
                   <div
                     key={clip.id}
                     className="absolute inset-0 flex items-center justify-center pointer-events-none"
                     style={{ zIndex: 100 + i }}
                   >
-                    {clip.textBg && (
-                      <div
-                        className="absolute rounded px-3 py-1"
-                        style={{
-                          backgroundColor: clip.textBgColor || '#000000',
-                          opacity: clip.textBgOpacity ?? 0.6,
-                        }}
-                      >
-                        <span style={{ fontSize, visibility: 'hidden', fontWeight: weight, fontFamily }}>{clip.text || clip.name}</span>
+                    {perLine && anim !== 'none' ? (
+                      <div className="flex flex-col items-center gap-0.5 relative">
+                        {clip.textBg && (
+                          <div
+                            className="absolute inset-0 rounded px-3 py-1 -m-1"
+                            style={{
+                              backgroundColor: clip.textBgColor || '#000000',
+                              opacity: clip.textBgOpacity ?? 0.6,
+                            }}
+                          />
+                        )}
+                        {lines.map((line, li) => (
+                          <span
+                            key={li}
+                            style={{
+                              fontSize,
+                              fontFamily,
+                              color: clip.fontColor || '#ffffff',
+                              fontWeight: weight,
+                              textShadow: shadowStyle,
+                              WebkitTextStroke: stroke > 0 ? `${stroke}px ${strokeColor}` : undefined,
+                              paintOrder: stroke > 0 ? 'stroke fill' : undefined,
+                              position: 'relative',
+                              display: 'block',
+                              whiteSpace: 'pre',
+                              ...getLineStyle(li),
+                            }}
+                          >
+                            {line}
+                          </span>
+                        ))}
                       </div>
+                    ) : (
+                      <>
+                        {clip.textBg && (
+                          <div
+                            className="absolute rounded px-3 py-1"
+                            style={{
+                              backgroundColor: clip.textBgColor || '#000000',
+                              opacity: clip.textBgOpacity ?? 0.6,
+                            }}
+                          >
+                            <span style={{ fontSize, visibility: 'hidden', fontWeight: weight, fontFamily }}>{fullText}</span>
+                          </div>
+                        )}
+                        <span
+                          style={{
+                            fontSize,
+                            fontFamily,
+                            color: clip.fontColor || '#ffffff',
+                            fontWeight: weight,
+                            textShadow: shadowStyle,
+                            WebkitTextStroke: stroke > 0 ? `${stroke}px ${strokeColor}` : undefined,
+                            paintOrder: stroke > 0 ? 'stroke fill' : undefined,
+                            position: 'relative',
+                            whiteSpace: 'pre-line',
+                            ...getLineStyle(0),
+                          }}
+                        >
+                          {fullText}
+                        </span>
+                      </>
                     )}
-                    <span
-                      style={{
-                        fontSize,
-                        fontFamily,
-                        color: clip.fontColor || '#ffffff',
-                        fontWeight: weight,
-                        textShadow: shadowStyle,
-                        WebkitTextStroke: stroke > 0 ? `${stroke}px ${strokeColor}` : undefined,
-                        paintOrder: stroke > 0 ? 'stroke fill' : undefined,
-                        position: 'relative',
-                        opacity: clip.opacity,
-                      }}
-                    >
-                      {clip.text || clip.name}
-                    </span>
                   </div>
                 );
               })}

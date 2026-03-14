@@ -291,10 +291,12 @@ const PropertiesPanel = () => {
                 <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Текст</span>
                 <div>
                   <Label className="text-[10px] text-muted-foreground">Содержание</Label>
-                  <Input
+                  <textarea
                     value={selectedClip.text || ''}
                     onChange={e => updateClip(selectedClip.id, { text: e.target.value })}
-                    className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
+                    rows={3}
+                    className="w-full text-xs mt-0.5 px-2 py-1.5 bg-secondary/50 border border-border rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-ring"
+                    placeholder="Каждая строка — отдельное предложение"
                   />
                 </div>
 
@@ -469,6 +471,91 @@ const PropertiesPanel = () => {
                         className="mt-1"
                       />
                     </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator className="bg-border/50" />
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Icon name="Sparkles" size={10} className="text-purple-400" />
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Анимация появления</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1">
+                  {([
+                    ['none', 'Нет', 'Minus'],
+                    ['fade', 'Плавно', 'Eye'],
+                    ['typewriter', 'Печать', 'Type'],
+                    ['slide-up', 'Снизу', 'ArrowUp'],
+                    ['slide-down', 'Сверху', 'ArrowDown'],
+                    ['scale', 'Масштаб', 'Maximize2'],
+                  ] as const).map(([val, label, icon]) => (
+                    <button
+                      key={val}
+                      onClick={() => updateClip(selectedClip.id, { textAnimation: val })}
+                      className={`flex flex-col items-center gap-0.5 py-1.5 px-1 rounded text-[8px] transition-colors ${
+                        (selectedClip.textAnimation || 'none') === val
+                          ? 'bg-purple-500/20 border border-purple-500/40 text-purple-300'
+                          : 'bg-secondary/50 hover:bg-secondary border border-transparent text-muted-foreground'
+                      }`}
+                    >
+                      <Icon name={icon} size={12} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {selectedClip.textAnimation && selectedClip.textAnimation !== 'none' && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] text-muted-foreground">Построчно</Label>
+                      <button
+                        onClick={() => updateClip(selectedClip.id, { textAnimationPerLine: !selectedClip.textAnimationPerLine })}
+                        className={`w-8 h-4 rounded-full transition-colors ${selectedClip.textAnimationPerLine ? 'bg-purple-500' : 'bg-secondary'}`}
+                      >
+                        <div className={`w-3 h-3 rounded-full bg-white transition-transform ${selectedClip.textAnimationPerLine ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
+                      </button>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between">
+                        <Label className="text-[10px] text-muted-foreground">Длительность</Label>
+                        <span className="text-[10px] text-muted-foreground">{(selectedClip.textAnimationDuration ?? 0.5).toFixed(1)}с</span>
+                      </div>
+                      <Slider
+                        value={[(selectedClip.textAnimationDuration ?? 0.5) * 10]}
+                        onValueChange={([v]) => updateClip(selectedClip.id, { textAnimationDuration: v / 10 })}
+                        min={1}
+                        max={20}
+                        step={1}
+                        className="mt-1"
+                      />
+                    </div>
+
+                    {selectedClip.textAnimationPerLine && (
+                      <div>
+                        <div className="flex justify-between">
+                          <Label className="text-[10px] text-muted-foreground">Задержка между строками</Label>
+                          <span className="text-[10px] text-muted-foreground">{(selectedClip.textAnimationDelay ?? 0.3).toFixed(1)}с</span>
+                        </div>
+                        <Slider
+                          value={[(selectedClip.textAnimationDelay ?? 0.3) * 10]}
+                          onValueChange={([v]) => updateClip(selectedClip.id, { textAnimationDelay: v / 10 })}
+                          min={1}
+                          max={30}
+                          step={1}
+                          className="mt-1"
+                        />
+                      </div>
+                    )}
+
+                    {selectedClip.textAnimationPerLine && (
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-purple-500/10 text-[9px] text-purple-300">
+                        <Icon name="Info" size={9} />
+                        <span>Разделяйте текст на строки через Enter</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
