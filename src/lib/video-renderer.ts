@@ -779,7 +779,6 @@ export class VideoRenderer {
         const family = clip.fontFamily ? `"${clip.fontFamily}", sans-serif` : "sans-serif";
         ctx.font = `${weight} ${fontSize}px ${family}`;
         const textAlignVal = clip.textAlign || 'center';
-        ctx.textAlign = textAlignVal;
         ctx.textBaseline = "middle";
         const textContent = clip.text || clip.name;
         const posX = clip.positionX;
@@ -795,7 +794,9 @@ export class VideoRenderer {
           ctx.translate(-cx, -cy);
         }
 
-        const maxTextW = clip.textWidth ? (clip.textWidth / 100) * width : width * 0.96;
+        const hasTextWidth = !!clip.textWidth;
+        const maxTextW = hasTextWidth ? (clip.textWidth! / 100) * width : width * 0.96;
+        ctx.textAlign = 'left';
         const lines = this.wrapTextLines(ctx, textContent, maxTextW);
         const lineHeight = fontSize * 1.3;
         const totalTextH = lines.length * lineHeight;
@@ -806,13 +807,21 @@ export class VideoRenderer {
         const animDelay = clip.textAnimationDelay ?? 0.3;
         const elapsed = currentTime - clip.startTime;
 
-        let alignOffsetX = 0;
-        if (textAlignVal === 'left') alignOffsetX = maxTextW / 2;
-        else if (textAlignVal === 'right') alignOffsetX = -maxTextW / 2;
+        const blockW = hasTextWidth ? maxTextW : Math.max(...lines.map(l => ctx.measureText(l).width));
+        const blockLeft = cx - blockW / 2;
 
         for (let li = 0; li < lines.length; li++) {
           const lineY = cy - totalTextH / 2 + li * lineHeight + lineHeight / 2;
-          const lineX = cx + alignOffsetX;
+          const lineMetrics = ctx.measureText(lines[li]);
+          const lineW = lineMetrics.width;
+          let lineX: number;
+          if (textAlignVal === 'left') {
+            lineX = blockLeft;
+          } else if (textAlignVal === 'right') {
+            lineX = blockLeft + blockW - lineW;
+          } else {
+            lineX = blockLeft + (blockW - lineW) / 2;
+          }
 
           let lineOpacity = clip.opacity;
           const lineOffsetX = 0;
@@ -848,15 +857,13 @@ export class VideoRenderer {
           const drawY = lineY + lineOffsetY;
 
           if (clip.textBg) {
-            const metrics = ctx.measureText(lines[li]);
-            const tw = metrics.width + fontSize * 0.6;
+            const tw = lineW + fontSize * 0.6;
             const th = fontSize * 1.4;
             ctx.save();
             ctx.globalAlpha = clip.textBgOpacity ?? 0.6;
             ctx.fillStyle = clip.textBgColor || "#000000";
-            const bgAlign = textAlignVal === 'left' ? drawX - fontSize * 0.3 : textAlignVal === 'right' ? drawX - tw + fontSize * 0.3 : drawX - tw / 2;
             ctx.beginPath();
-            ctx.roundRect(bgAlign, drawY - th / 2, tw, th, fontSize * 0.15);
+            ctx.roundRect(drawX - fontSize * 0.3, drawY - th / 2, tw, th, fontSize * 0.15);
             ctx.fill();
             ctx.restore();
             ctx.globalAlpha = lineOpacity;
@@ -875,11 +882,9 @@ export class VideoRenderer {
             ctx.lineJoin = "round";
             if (clipPathFraction < 1) {
               ctx.save();
-              const fullW = ctx.measureText(lines[li]).width;
-              const clipW = fullW * clipPathFraction;
-              const clipStartX = textAlignVal === 'right' ? drawX - fullW : textAlignVal === 'center' ? drawX - fullW / 2 : drawX;
+              const clipW = lineW * clipPathFraction;
               ctx.beginPath();
-              ctx.rect(clipStartX, drawY - fontSize, clipW, fontSize * 2.5);
+              ctx.rect(drawX, drawY - fontSize, clipW, fontSize * 2.5);
               ctx.clip();
               ctx.strokeText(lines[li], drawX, drawY);
               ctx.restore();
@@ -892,11 +897,9 @@ export class VideoRenderer {
           ctx.fillStyle = clip.fontColor || "#ffffff";
           if (clipPathFraction < 1) {
             ctx.save();
-            const fullW = ctx.measureText(lines[li]).width;
-            const clipW = fullW * clipPathFraction;
-            const clipStartX = textAlignVal === 'right' ? drawX - fullW : textAlignVal === 'center' ? drawX - fullW / 2 : drawX;
+            const clipW = lineW * clipPathFraction;
             ctx.beginPath();
-            ctx.rect(clipStartX, drawY - fontSize, clipW, fontSize * 2.5);
+            ctx.rect(drawX, drawY - fontSize, clipW, fontSize * 2.5);
             ctx.clip();
             ctx.fillText(lines[li], drawX, drawY);
             ctx.restore();
