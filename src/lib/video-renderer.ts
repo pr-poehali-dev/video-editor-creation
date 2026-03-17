@@ -73,6 +73,12 @@ interface ClipInfo {
   textBg?: boolean;
   textBgColor?: string;
   textBgOpacity?: number;
+  textWidth?: number;
+  textAlign?: 'left' | 'center' | 'right';
+  textAnimation?: 'none' | 'fade' | 'typewriter' | 'slide-up' | 'slide-down' | 'scale';
+  textAnimationPerLine?: boolean;
+  textAnimationDuration?: number;
+  textAnimationDelay?: number;
   trackMuted: boolean;
   filters: ClipFilter[];
   transition?: ClipTransition;
@@ -772,43 +778,133 @@ export class VideoRenderer {
         const weight = clip.fontWeight || 600;
         const family = clip.fontFamily ? `"${clip.fontFamily}", sans-serif` : "sans-serif";
         ctx.font = `${weight} ${fontSize}px ${family}`;
-        ctx.textAlign = "center";
+        const textAlignVal = clip.textAlign || 'center';
+        ctx.textAlign = textAlignVal;
         ctx.textBaseline = "middle";
         const textContent = clip.text || clip.name;
-        const cx = width / 2;
-        const cy = height / 2;
+        const posX = clip.positionX;
+        const posY = clip.positionY;
+        const cx = (posX / 100) * width;
+        const cy = (posY / 100) * height;
 
-        if (clip.textBg) {
-          const metrics = ctx.measureText(textContent);
-          const tw = metrics.width + fontSize * 0.6;
-          const th = fontSize * 1.4;
+        const hasTransform = clip.scale !== 100 || clip.rotation !== 0;
+        if (hasTransform) {
+          ctx.translate(cx, cy);
+          ctx.rotate((clip.rotation * Math.PI) / 180);
+          ctx.scale(clip.scale / 100, clip.scale / 100);
+          ctx.translate(-cx, -cy);
+        }
+
+        const maxTextW = clip.textWidth ? (clip.textWidth / 100) * width : width * 0.96;
+        const lines = this.wrapTextLines(ctx, textContent, maxTextW);
+        const lineHeight = fontSize * 1.3;
+        const totalTextH = lines.length * lineHeight;
+
+        const anim = clip.textAnimation || 'none';
+        const perLine = clip.textAnimationPerLine ?? false;
+        const animDur = clip.textAnimationDuration ?? 0.5;
+        const animDelay = clip.textAnimationDelay ?? 0.3;
+        const elapsed = currentTime - clip.startTime;
+
+        let alignOffsetX = 0;
+        if (textAlignVal === 'left') alignOffsetX = maxTextW / 2;
+        else if (textAlignVal === 'right') alignOffsetX = -maxTextW / 2;
+
+        for (let li = 0; li < lines.length; li++) {
+          const lineY = cy - totalTextH / 2 + li * lineHeight + lineHeight / 2;
+          const lineX = cx + alignOffsetX;
+
+          let lineOpacity = clip.opacity;
+          const lineOffsetX = 0;
+          let lineOffsetY = 0;
+          let lineScale = 1;
+          let clipPathFraction = 1;
+
+          if (anim !== 'none') {
+            const lineStart = perLine ? li * animDelay : 0;
+            const progress = Math.max(0, Math.min(1, (elapsed - lineStart) / animDur));
+            const ease = progress * progress * (3 - 2 * progress);
+            if (progress <= 0) { lineOpacity = 0; }
+            else {
+              switch (anim) {
+                case 'fade': lineOpacity = ease * clip.opacity; break;
+                case 'typewriter': clipPathFraction = ease; break;
+                case 'slide-up': lineOpacity = ease * clip.opacity; lineOffsetY = (1 - ease) * fontSize * 0.5; break;
+                case 'slide-down': lineOpacity = ease * clip.opacity; lineOffsetY = -(1 - ease) * fontSize * 0.5; break;
+                case 'scale': lineOpacity = ease * clip.opacity; lineScale = 0.5 + 0.5 * ease; break;
+              }
+            }
+          }
+
           ctx.save();
-          ctx.globalAlpha = clip.textBgOpacity ?? 0.6;
-          ctx.fillStyle = clip.textBgColor || "#000000";
-          ctx.beginPath();
-          ctx.roundRect(cx - tw / 2, cy - th / 2, tw, th, fontSize * 0.15);
-          ctx.fill();
+          ctx.globalAlpha = lineOpacity;
+          if (lineScale !== 1) {
+            ctx.translate(lineX, lineY + lineOffsetY);
+            ctx.scale(lineScale, lineScale);
+            ctx.translate(-lineX, -(lineY + lineOffsetY));
+          }
+
+          const drawX = lineX + lineOffsetX;
+          const drawY = lineY + lineOffsetY;
+
+          if (clip.textBg) {
+            const metrics = ctx.measureText(lines[li]);
+            const tw = metrics.width + fontSize * 0.6;
+            const th = fontSize * 1.4;
+            ctx.save();
+            ctx.globalAlpha = clip.textBgOpacity ?? 0.6;
+            ctx.fillStyle = clip.textBgColor || "#000000";
+            const bgAlign = textAlignVal === 'left' ? drawX - fontSize * 0.3 : textAlignVal === 'right' ? drawX - tw + fontSize * 0.3 : drawX - tw / 2;
+            ctx.beginPath();
+            ctx.roundRect(bgAlign, drawY - th / 2, tw, th, fontSize * 0.15);
+            ctx.fill();
+            ctx.restore();
+            ctx.globalAlpha = lineOpacity;
+          }
+
+          const shadowBlur = clip.textShadow ?? 8;
+          if (shadowBlur > 0) {
+            ctx.shadowColor = "rgba(0,0,0,0.7)";
+            ctx.shadowBlur = shadowBlur;
+          }
+
+          const stroke = clip.textStroke ?? 0;
+          if (stroke > 0) {
+            ctx.strokeStyle = clip.textStrokeColor || "#000000";
+            ctx.lineWidth = stroke * 2;
+            ctx.lineJoin = "round";
+            if (clipPathFraction < 1) {
+              ctx.save();
+              const fullW = ctx.measureText(lines[li]).width;
+              const clipW = fullW * clipPathFraction;
+              const clipStartX = textAlignVal === 'right' ? drawX - fullW : textAlignVal === 'center' ? drawX - fullW / 2 : drawX;
+              ctx.beginPath();
+              ctx.rect(clipStartX, drawY - fontSize, clipW, fontSize * 2.5);
+              ctx.clip();
+              ctx.strokeText(lines[li], drawX, drawY);
+              ctx.restore();
+            } else {
+              ctx.strokeText(lines[li], drawX, drawY);
+            }
+            ctx.shadowBlur = 0;
+          }
+
+          ctx.fillStyle = clip.fontColor || "#ffffff";
+          if (clipPathFraction < 1) {
+            ctx.save();
+            const fullW = ctx.measureText(lines[li]).width;
+            const clipW = fullW * clipPathFraction;
+            const clipStartX = textAlignVal === 'right' ? drawX - fullW : textAlignVal === 'center' ? drawX - fullW / 2 : drawX;
+            ctx.beginPath();
+            ctx.rect(clipStartX, drawY - fontSize, clipW, fontSize * 2.5);
+            ctx.clip();
+            ctx.fillText(lines[li], drawX, drawY);
+            ctx.restore();
+          } else {
+            ctx.fillText(lines[li], drawX, drawY);
+          }
           ctx.restore();
-          ctx.globalAlpha = clip.opacity;
         }
-
-        const shadowBlur = clip.textShadow ?? 8;
-        if (shadowBlur > 0) {
-          ctx.shadowColor = "rgba(0,0,0,0.7)";
-          ctx.shadowBlur = shadowBlur;
-        }
-
-        const stroke = clip.textStroke ?? 0;
-        if (stroke > 0) {
-          ctx.strokeStyle = clip.textStrokeColor || "#000000";
-          ctx.lineWidth = stroke * 2;
-          ctx.lineJoin = "round";
-          ctx.strokeText(textContent, cx, cy);
-          ctx.shadowBlur = 0;
-        }
-
-        ctx.fillStyle = clip.fontColor || "#ffffff";
-        ctx.fillText(textContent, cx, cy);
         ctx.restore();
       }
     }
@@ -1038,6 +1134,12 @@ export class VideoRenderer {
           textBg: clip.textBg,
           textBgColor: clip.textBgColor,
           textBgOpacity: clip.textBgOpacity,
+          textWidth: clip.textWidth,
+          textAlign: clip.textAlign,
+          textAnimation: clip.textAnimation,
+          textAnimationPerLine: clip.textAnimationPerLine,
+          textAnimationDuration: clip.textAnimationDuration,
+          textAnimationDelay: clip.textAnimationDelay,
           trackMuted: track.muted,
           filters: (clip.filters || []).map(f => ({ name: f.name, params: f.params })),
           transition: clip.transition,
@@ -1269,6 +1371,27 @@ export class VideoRenderer {
       offset += chunk.length;
     }
     return result.buffer;
+  }
+
+  private wrapTextLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+    const hardLines = text.split('\n');
+    const result: string[] = [];
+    for (const hardLine of hardLines) {
+      if (hardLine === '') { result.push(''); continue; }
+      const words = hardLine.split(/(\s+)/);
+      let current = '';
+      for (const word of words) {
+        const test = current + word;
+        if (ctx.measureText(test).width > maxWidth && current.length > 0) {
+          result.push(current);
+          current = word.trimStart();
+        } else {
+          current = test;
+        }
+      }
+      if (current) result.push(current);
+    }
+    return result.length > 0 ? result : [''];
   }
 
   private resolveAssetUrl(assetId: string, originalUrl: string): string {
