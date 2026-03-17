@@ -29,8 +29,40 @@ const Toolbar = () => {
   const projectMenuRef = useRef<HTMLDivElement>(null);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const savingRef = useRef(false);
+  const [dirty, setDirty] = useState(false);
+  const lastSavedRef = useRef<string>('');
 
   useEffect(() => { loadProfile(); }, []);
+
+  useEffect(() => {
+    if (!project.id) return;
+    const data = getProjectData();
+    const snapshot = JSON.stringify({ tracks: data.tracks, assets: data.assets, exportSettings: data.exportSettings });
+    lastSavedRef.current = snapshot;
+    setDirty(false);
+  }, [project.id]);
+
+  useEffect(() => {
+    const check = () => {
+      const data = getProjectData();
+      const snapshot = JSON.stringify({ tracks: data.tracks, assets: data.assets, exportSettings: data.exportSettings });
+      if (lastSavedRef.current && snapshot !== lastSavedRef.current) {
+        setDirty(true);
+      }
+    };
+    const interval = setInterval(check, 3000);
+    return () => clearInterval(interval);
+  }, [getProjectData]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -64,6 +96,9 @@ const Toolbar = () => {
           exportSettings: data.exportSettings,
         },
       });
+      const savedSnapshot = JSON.stringify({ tracks: cleanTracks, assets: persistableAssets, exportSettings: data.exportSettings });
+      lastSavedRef.current = savedSnapshot;
+      setDirty(false);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
@@ -178,9 +213,10 @@ const Toolbar = () => {
                 className={saving ? 'animate-spin' : ''}
               />
               {saveError ? 'Ошибка!' : saved ? 'Сохранено!' : saving ? 'Сохраняю...' : 'Сохранить'}
+              {dirty && !saving && !saved && !saveError && <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />}
             </button>
           </TooltipTrigger>
-          <TooltipContent><p className="text-[10px]">Сохранить проект (Ctrl+S)</p></TooltipContent>
+          <TooltipContent><p className="text-[10px]">{dirty ? 'Есть несохранённые изменения (Ctrl+S)' : 'Сохранить проект (Ctrl+S)'}</p></TooltipContent>
         </Tooltip>
       </div>
 
