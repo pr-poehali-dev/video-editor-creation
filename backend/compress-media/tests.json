@@ -1,0 +1,32 @@
+{
+  "tests": [
+    {
+      "name": "Get compression status",
+      "method": "GET",
+      "path": "/?action=status",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "oversized_count": "number",
+        "oversized_total_mb": "number",
+        "target_size_mb": "number"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Dry run compression",
+      "method": "POST",
+      "path": "/?action=compress",
+      "body": {
+        "dry_run": true,
+        "limit": 5
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "processed": "number",
+        "total_saved_mb": "number",
+        "dry_run": true
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
