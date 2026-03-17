@@ -1,4 +1,5 @@
 import { useToast } from '@/hooks/use-toast';
+import { compressFile } from '@/hooks/useFileCompression';
 
 interface PhotoFolder {
   id: number;
@@ -197,9 +198,23 @@ export const usePhotoBankHandlers = (
     const BATCH_SIZE = 5;
     let cancelledRef = uploadCancelled;
     
-    const uploadSingleFile = async (file: File, index: number) => {
+    const uploadSingleFile = async (originalFile: File, index: number) => {
       if (cancelledRef) {
         throw new Error('Upload cancelled');
+      }
+      
+      let file = originalFile;
+      
+      if (file.type.startsWith('image/') && !isRawFile(file.name) && file.size > 2 * 1024 * 1024) {
+        try {
+          const result = await compressFile(file, { imageTargetSize: 2.5 * 1024 * 1024 });
+          if (result.wasCompressed) {
+            file = result.file;
+            console.log(`[UPLOAD] Compressed ${originalFile.name}: ${(originalFile.size / 1024 / 1024).toFixed(2)} MB → ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+          }
+        } catch (e) {
+          console.error('[UPLOAD] Compression failed, using original:', e);
+        }
       }
       
       console.log(`[UPLOAD] Processing file ${index + 1}/${mediaFiles.length}: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);

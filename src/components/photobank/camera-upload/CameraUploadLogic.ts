@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { compressFile } from '@/hooks/useFileCompression';
 import {
   FileUploadStatus,
   MOBILE_UPLOAD_API,
@@ -68,7 +69,21 @@ export const useCameraUploadLogic = (
   };
 
   const uploadFile = async (fileStatus: FileUploadStatus, uploadUrl?: string, s3Key?: string, retryAttempt: number = 0, onPhotoAdded?: () => void): Promise<void> => {
-    const { file } = fileStatus;
+    let { file } = fileStatus;
+
+    if (retryAttempt === 0 && file.type.startsWith('image/') && file.size > 5 * 1024 * 1024) {
+      try {
+        const result = await compressFile(file, { imageTargetSize: 5 * 1024 * 1024 });
+        if (result.wasCompressed) {
+          file = result.file;
+          fileStatus = { ...fileStatus, file };
+          console.log(`[CAMERA_UPLOAD] Compressed ${fileStatus.file.name}: ${(result.originalSize / 1024 / 1024).toFixed(1)} → ${(result.compressedSize / 1024 / 1024).toFixed(1)} MB`);
+        }
+      } catch (e) {
+        console.error('[CAMERA_UPLOAD] Compression failed:', e);
+      }
+    }
+
     const abortController = new AbortController();
     abortControllersRef.current.set(file.name, abortController);
 

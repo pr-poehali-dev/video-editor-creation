@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { compressFile } from '@/hooks/useFileCompression';
 import { ClientUploadFolder, UploadedPhoto } from './useClientUploadState';
 
 const CLIENT_UPLOAD_URL = 'https://functions.poehali.dev/06dd3267-2ef6-45bc-899c-50f86e9d36e1';
@@ -313,15 +314,6 @@ export function useFileUploadHandler({
     if (!files || files.length === 0 || !activeFolderId) return;
 
     const MAX_FILE_SIZE = 50 * 1024 * 1024;
-    const tooLargeFiles = Array.from(files).filter(f => f.size > MAX_FILE_SIZE);
-    if (tooLargeFiles.length > 0) {
-      toast({
-        title: 'Файлы слишком большие',
-        description: `${tooLargeFiles.length} файлов превышают 50 МБ.`,
-        variant: 'destructive'
-      });
-      return;
-    }
 
     setUploading(true);
     setUploadProgress({ current: 0, total: files.length });
@@ -329,7 +321,24 @@ export function useFileUploadHandler({
     const errors: string[] = [];
 
     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+      let file = files[i];
+
+      if (file.size > MAX_FILE_SIZE && file.type.startsWith('image/')) {
+        try {
+          const result = await compressFile(file, { imageTargetSize: MAX_FILE_SIZE - 1024 * 1024 });
+          if (result.wasCompressed) {
+            file = result.file;
+          }
+        } catch (e) {
+          console.error('[client-upload] Compression failed:', e);
+        }
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        errors.push(`${file.name}: файл слишком большой`);
+        setUploadProgress({ current: i + 1, total: files.length });
+        continue;
+      }
       try {
         const urlRes = await fetch(CLIENT_UPLOAD_URL, {
           method: 'POST',

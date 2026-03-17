@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { compressFile } from '@/hooks/useFileCompression';
 import { FileUploadStatus } from './CameraUploadTypes';
 
 const DIRECT_UPLOAD_API = 'https://functions.poehali.dev/145813d2-d8f3-4a2b-b38e-08583a3153da';
@@ -61,7 +62,20 @@ export const useFastUploadLogic = (
 
   // Загружаем файл напрямую в S3
   const uploadFileToS3 = async (fileStatus: FileUploadStatus, uploadInfo: {url: string, key: string}): Promise<void> => {
-    const { file } = fileStatus;
+    let { file } = fileStatus;
+
+    if (file.type.startsWith('image/') && file.size > 5 * 1024 * 1024) {
+      try {
+        const result = await compressFile(file, { imageTargetSize: 5 * 1024 * 1024 });
+        if (result.wasCompressed) {
+          file = result.file;
+          console.log(`[FAST_UPLOAD] Compressed ${fileStatus.file.name}: ${(result.originalSize / 1024 / 1024).toFixed(1)} → ${(result.compressedSize / 1024 / 1024).toFixed(1)} MB`);
+        }
+      } catch (e) {
+        console.error('[FAST_UPLOAD] Compression failed:', e);
+      }
+    }
+
     const abortController = new AbortController();
     abortControllersRef.current.set(file.name, abortController);
 

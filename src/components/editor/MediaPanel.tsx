@@ -4,6 +4,7 @@ import useEditorStore from '@/hooks/use-editor-store';
 import useAuth from '@/hooks/use-auth';
 import { media as mediaApi, shop } from '@/lib/api';
 import { generateAudio } from '@/lib/audio-synth';
+import { compressFile, formatCompressionInfo } from '@/hooks/useFileCompression';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -372,7 +373,28 @@ const MediaPanel = () => {
 
     if (!isAuthenticated) return;
 
-    if (file.size > MAX_UPLOAD_SIZE) {
+    let uploadTarget = file;
+
+    if (file.size > MAX_UPLOAD_SIZE || (type === 'image' && file.size > 5 * 1024 * 1024)) {
+      try {
+        const result = await compressFile(file, {
+          imageTargetSize: 5 * 1024 * 1024,
+          videoTargetSize: MAX_UPLOAD_SIZE - 5 * 1024 * 1024,
+        });
+        if (result.wasCompressed) {
+          uploadTarget = result.file;
+          const info = formatCompressionInfo(result);
+          console.log(`[compress] ${file.name}: ${info}`);
+          useEditorStore.setState((s) => ({
+            assets: s.assets.map(a => a.id === asset.id ? { ...a, size: result.compressedSize, name: result.file.name } : a),
+          }));
+        }
+      } catch (e) {
+        console.error('[compress] Failed:', e);
+      }
+    }
+
+    if (uploadTarget.size > MAX_UPLOAD_SIZE) {
       setUploadErrors(prev => [...prev, {
         name: file.name,
         error: `Файл слишком большой (${formatSize(file.size)}). Макс: 150 МБ`,
@@ -386,10 +408,10 @@ const MediaPanel = () => {
       return;
     }
 
-    if (file.size > DIRECT_UPLOAD_LIMIT) {
-      doChunkedUpload(file, asset.id, duration);
+    if (uploadTarget.size > DIRECT_UPLOAD_LIMIT) {
+      doChunkedUpload(uploadTarget, asset.id, duration);
     } else {
-      doUpload(file, asset.id, duration, 1);
+      doUpload(uploadTarget, asset.id, duration, 1);
     }
   }, [addAsset, isAuthenticated, doUpload, doChunkedUpload]);
 
