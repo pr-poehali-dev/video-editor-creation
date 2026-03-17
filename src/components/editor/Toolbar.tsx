@@ -6,6 +6,7 @@ import useAuth from '@/hooks/use-auth';
 import { projects } from '@/lib/api';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
+import ProjectSettingsDialog from '@/components/editor/ProjectSettingsDialog';
 
 const tools = [
   { id: 'select', icon: 'MousePointer2', label: 'Выделение (V)', key: 'v' },
@@ -31,6 +32,7 @@ const Toolbar = () => {
   const savingRef = useRef(false);
   const [dirty, setDirty] = useState(false);
   const lastSavedRef = useRef<string>('');
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => { loadProfile(); }, []);
 
@@ -167,6 +169,9 @@ const Toolbar = () => {
                 <button onClick={handleNewProject} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50">
                   <Icon name="FilePlus" size={11} /> Новый проект
                 </button>
+                <button onClick={() => { setShowSettings(true); setShowProjectMenu(false); }} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50">
+                  <Icon name="Settings2" size={11} /> Настройки проекта
+                </button>
                 <div className="border-t border-border my-1" />
                 <button onClick={() => setAutoSaveEnabled(!autoSaveEnabled)} className="flex items-center justify-between w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50">
                   <span className="flex items-center gap-2">
@@ -237,9 +242,9 @@ const Toolbar = () => {
       </div>
 
       <div className="flex items-center gap-2">
-        <span className="text-[10px] text-muted-foreground">
+        <button onClick={() => setShowSettings(true)} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
           {project.width}×{project.height} | {project.fps}fps
-        </span>
+        </button>
         <Separator orientation="vertical" className="h-5 bg-border/50" />
 
         <button
@@ -275,6 +280,7 @@ const Toolbar = () => {
           </button>
         )}
       </div>
+      <ProjectSettingsDialog open={showSettings} onOpenChange={setShowSettings} />
     </div>
   );
 };
