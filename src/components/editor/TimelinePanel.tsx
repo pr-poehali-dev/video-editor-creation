@@ -13,7 +13,16 @@ const formatTime = (sec: number): string => {
   return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
-const clipTypeClass = (type: string) => {
+const textPresetClass: Record<string, string> = {
+  'Заголовок': 'clip-text-title',
+  'Субтитры': 'clip-text-subtitle',
+  'Нижняя третья': 'clip-text-lower',
+  'Титры': 'clip-text-credits',
+  'Выноска': 'clip-text-callout',
+};
+
+const clipTypeClass = (type: string, name?: string) => {
+  if (type === 'text' && name && textPresetClass[name]) return textPresetClass[name];
   switch (type) {
     case 'video': return 'clip-video';
     case 'audio': return 'clip-audio';
@@ -436,7 +445,7 @@ const TimelinePanel = () => {
                   return (
                     <div
                       key={clip.id}
-                      className={`absolute top-1 rounded cursor-pointer transition-shadow ${clipTypeClass(clip.type)} ${
+                      className={`absolute top-1 rounded cursor-pointer transition-shadow ${clipTypeClass(clip.type, clip.name)} ${
                         isSelected ? 'ring-2 ring-white/80 shadow-lg shadow-black/30 z-10' :
                         isDragging ? 'ring-1 ring-primary/50 shadow-md z-10 opacity-90' :
                         'hover:brightness-125 hover:shadow-md'

@@ -41,6 +41,11 @@
     --editor-clip-video: 210 80% 40%;
     --editor-clip-audio: 140 60% 35%;
     --editor-clip-text: 280 60% 45%;
+    --editor-clip-text-title: 260 70% 50%;
+    --editor-clip-text-subtitle: 190 70% 40%;
+    --editor-clip-text-lower: 340 65% 45%;
+    --editor-clip-text-credits: 45 75% 45%;
+    --editor-clip-text-callout: 160 60% 40%;
     --editor-clip-image: 30 80% 45%;
     --editor-playhead: 0 85% 55%;
     --editor-selection: 210 100% 52%;
@@ -127,6 +132,26 @@
 
   .clip-text {
     background: hsl(var(--editor-clip-text));
+  }
+
+  .clip-text-title {
+    background: hsl(var(--editor-clip-text-title));
+  }
+
+  .clip-text-subtitle {
+    background: hsl(var(--editor-clip-text-subtitle));
+  }
+
+  .clip-text-lower {
+    background: hsl(var(--editor-clip-text-lower));
+  }
+
+  .clip-text-credits {
+    background: hsl(var(--editor-clip-text-credits));
+  }
+
+  .clip-text-callout {
+    background: hsl(var(--editor-clip-text-callout));
   }
 
   .clip-image {

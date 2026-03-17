@@ -46,11 +46,11 @@ const baseTransitions = [
 ];
 
 const baseTextPresets = [
-  { name: 'Заголовок', icon: 'Type', desc: 'Крупный текст по центру', free: true },
-  { name: 'Субтитры', icon: 'Subtitles', desc: 'Текст внизу экрана', free: true },
-  { name: 'Нижняя третья', icon: 'PanelBottom', desc: 'Плашка с именем', free: true },
-  { name: 'Титры', icon: 'ScrollText', desc: 'Конечные титры', free: true },
-  { name: 'Выноска', icon: 'MessageSquare', desc: 'Всплывающая подпись', free: true },
+  { name: 'Заголовок', icon: 'Type', desc: 'Крупный текст по центру', free: true, cssVar: '--editor-clip-text-title' },
+  { name: 'Субтитры', icon: 'Subtitles', desc: 'Текст внизу экрана', free: true, cssVar: '--editor-clip-text-subtitle' },
+  { name: 'Нижняя третья', icon: 'PanelBottom', desc: 'Плашка с именем', free: true, cssVar: '--editor-clip-text-lower' },
+  { name: 'Титры', icon: 'ScrollText', desc: 'Конечные титры', free: true, cssVar: '--editor-clip-text-credits' },
+  { name: 'Выноска', icon: 'MessageSquare', desc: 'Всплывающая подпись', free: true, cssVar: '--editor-clip-text-callout' },
 ];
 
 const formatSize = (bytes: number): string => {
@@ -933,8 +933,8 @@ const MediaPanel = () => {
                   onClick={() => handleAddText(tp.name)}
                   className="flex items-center gap-2 p-2 rounded bg-secondary/30 hover:bg-secondary/50 cursor-pointer transition-colors"
                 >
-                  <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: 'hsl(var(--editor-bg))' }}>
-                    <Icon name={tp.icon} size={14} className="text-purple-400" />
+                  <div className="w-8 h-8 rounded flex items-center justify-center" style={{ background: `hsl(var(${tp.cssVar}) / 0.25)` }}>
+                    <Icon name={tp.icon} size={14} style={{ color: `hsl(var(${tp.cssVar}))` }} />
                   </div>
                   <div>
                     <div className="text-[11px] font-medium">{tp.name}</div>
