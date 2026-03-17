@@ -24,9 +24,11 @@ const Toolbar = () => {
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState(false);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const projectMenuRef = useRef<HTMLDivElement>(null);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const savingRef = useRef(false);
 
   useEffect(() => { loadProfile(); }, []);
 
@@ -40,7 +42,10 @@ const Toolbar = () => {
 
   const handleSave = useCallback(async () => {
     if (!project.id || !isAuthenticated) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
+    setSaveError(false);
     try {
       const data = getProjectData();
       const persistableAssets = data.assets.filter(a => a.url && !a.url.startsWith('blob:'));
@@ -63,8 +68,12 @@ const Toolbar = () => {
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
       console.error('Save failed:', e);
+      setSaveError(true);
+      setTimeout(() => setSaveError(false), 4000);
+    } finally {
+      setSaving(false);
+      savingRef.current = false;
     }
-    setSaving(false);
   }, [project.id, isAuthenticated, getProjectData]);
 
   const handleNewProject = useCallback(async () => {
@@ -91,14 +100,17 @@ const Toolbar = () => {
     return () => window.removeEventListener('keydown', handler);
   }, [handleSave]);
 
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
+
   useEffect(() => {
     if (autoSaveRef.current) clearInterval(autoSaveRef.current);
     if (!autoSaveEnabled || !project.id || !isAuthenticated) return;
     autoSaveRef.current = setInterval(() => {
-      handleSave();
-    }, 2 * 60 * 1000);
+      handleSaveRef.current();
+    }, 60 * 1000);
     return () => { if (autoSaveRef.current) clearInterval(autoSaveRef.current); };
-  }, [autoSaveEnabled, project.id, isAuthenticated, handleSave]);
+  }, [autoSaveEnabled, project.id, isAuthenticated]);
 
   return (
     <div className="h-10 flex items-center justify-between px-3 border-b border-border" style={{ background: 'hsl(var(--editor-panel))' }}>
@@ -158,14 +170,14 @@ const Toolbar = () => {
             <button
               onClick={handleSave}
               disabled={saving || !project.id}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-50 ${saveError ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
             >
               <Icon
-                name={saved ? 'Check' : saving ? 'Loader2' : 'Save'}
+                name={saveError ? 'AlertTriangle' : saved ? 'Check' : saving ? 'Loader2' : 'Save'}
                 size={13}
                 className={saving ? 'animate-spin' : ''}
               />
-              {saved ? 'Сохранено!' : saving ? 'Сохраняю...' : 'Сохранить'}
+              {saveError ? 'Ошибка!' : saved ? 'Сохранено!' : saving ? 'Сохраняю...' : 'Сохранить'}
             </button>
           </TooltipTrigger>
           <TooltipContent><p className="text-[10px]">Сохранить проект (Ctrl+S)</p></TooltipContent>
