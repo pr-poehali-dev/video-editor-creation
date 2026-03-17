@@ -58,7 +58,17 @@ const TimelinePanel = () => {
   const [snapLine, setSnapLine] = useState<number | null>(null);
 
   const pps = PIXELS_PER_SECOND * zoom;
-  const totalWidth = Math.max(project.duration * pps, 800);
+
+  const maxClipEnd = useMemo(() => {
+    let max = 0;
+    tracks.forEach(t => t.clips.forEach(c => {
+      max = Math.max(max, c.startTime + c.duration);
+    }));
+    return max;
+  }, [tracks]);
+
+  const effectiveDuration = Math.max(project.duration, maxClipEnd + 10);
+  const totalWidth = Math.max(effectiveDuration * pps, 800);
 
   const allClipEdges = useMemo(() => {
     const edges: number[] = [0];
@@ -90,11 +100,11 @@ const TimelinePanel = () => {
     if (zoom < 0.3) interval = 10;
     else if (zoom < 0.7) interval = 5;
     else if (zoom < 1.5) interval = 2;
-    for (let t = 0; t <= project.duration; t += interval) {
+    for (let t = 0; t <= effectiveDuration; t += interval) {
       markers.push({ time: t, label: formatTime(t), major: t % (interval * 2) === 0 });
     }
     return markers;
-  }, [zoom, project.duration]);
+  }, [zoom, effectiveDuration]);
 
   const handleTimelineClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (dragState) return;
@@ -112,7 +122,7 @@ const TimelinePanel = () => {
       if (!timelineRef.current) return;
       const rect = timelineRef.current.getBoundingClientRect();
       const x = ev.clientX - rect.left + timelineRef.current.scrollLeft;
-      setCurrentTime(Math.max(0, Math.min(project.duration, x / pps)));
+      setCurrentTime(Math.max(0, Math.min(effectiveDuration, x / pps)));
     };
     const handleUp = () => {
       document.removeEventListener('mousemove', handleMove);
@@ -120,7 +130,7 @@ const TimelinePanel = () => {
     };
     document.addEventListener('mousemove', handleMove);
     document.addEventListener('mouseup', handleUp);
-  }, [pps, project.duration, setCurrentTime]);
+  }, [pps, effectiveDuration, setCurrentTime]);
 
   const handleClipMouseDown = useCallback((e: React.MouseEvent, clipId: string, type: 'move' | 'resize-left' | 'resize-right', trackId: string) => {
     e.preventDefault();
