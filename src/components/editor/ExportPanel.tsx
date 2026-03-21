@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef } from 'react';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
+import { useDemo } from '@/contexts/demo-context';
+import { toast } from 'sonner';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -77,6 +79,7 @@ const formats: Array<{ value: ExportSettings['format']; label: string; desc: str
 
 const ExportPanel = () => {
   const { exportSettings, setExportSettings, project, tracks, assets, purchasedFeatureSlugs } = useEditorStore();
+  const { isDemo } = useDemo();
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [exportStage, setExportStage] = useState('');
@@ -111,6 +114,10 @@ const ExportPanel = () => {
   }, [setExportSettings, has4K]);
 
   const handleExport = useCallback(async () => {
+    if (isDemo) {
+      toast('Экспорт недоступен в демо-версии. Зарегистрируйтесь, чтобы экспортировать видео!');
+      return;
+    }
     if (clipCount === 0) return;
     if (exportSettings.quality === 'ultra' && !has4K) {
       setLockMessage('Для экспорта в 4K нужно расширение «Экспорт 4K» из магазина');
@@ -180,7 +187,7 @@ const ExportPanel = () => {
     }
 
     setIsExporting(false);
-  }, [tracks, assets, exportSettings, clipCount, has4K]);
+  }, [tracks, assets, exportSettings, clipCount, has4K, isDemo]);
 
   const handleCancel = useCallback(() => {
     if (rendererRef.current) {
@@ -193,6 +200,10 @@ const ExportPanel = () => {
   }, []);
 
   const handleDownload = useCallback(() => {
+    if (isDemo) {
+      toast('Экспорт недоступен в демо-версии. Зарегистрируйтесь, чтобы экспортировать видео!');
+      return;
+    }
     if (!resultUrl) return;
     const a = document.createElement('a');
     a.href = resultUrl;
@@ -200,7 +211,7 @@ const ExportPanel = () => {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  }, [resultUrl, resultFileName, exportSettings.format]);
+  }, [resultUrl, resultFileName, exportSettings.format, isDemo]);
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;

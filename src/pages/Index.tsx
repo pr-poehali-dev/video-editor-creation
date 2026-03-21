@@ -10,9 +10,10 @@ import {
   ResizableHandle,
 } from '@/components/ui/resizable';
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
+import { useDemo } from '@/contexts/demo-context';
 import { projects } from '@/lib/api';
 
 const Index = () => {
@@ -23,6 +24,7 @@ const Index = () => {
   const project = useEditorStore(s => s.project);
   const activePanel = useEditorStore(s => s.activePanel);
   const loadedRef = useRef<string | undefined>(undefined);
+  const { isDemo } = useDemo();
 
   const loadProjectData = useEditorStore(s => s.loadProjectData);
 
@@ -32,6 +34,11 @@ const Index = () => {
   }, [activePanel]);
 
   useEffect(() => {
+    if (isDemo) {
+      resetEditor(undefined);
+      setProject({ name: 'Демо-проект' });
+      return;
+    }
     const pid = projectId ? parseInt(projectId) : undefined;
     if (loadedRef.current === projectId) return;
     loadedRef.current = projectId;
@@ -54,7 +61,7 @@ const Index = () => {
         }
       }).catch(() => {});
     }
-  }, [projectId, resetEditor, setProject, loadProjectData]);
+  }, [projectId, resetEditor, setProject, loadProjectData, isDemo]);
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden" style={{ background: 'hsl(var(--editor-bg))' }}>
@@ -113,6 +120,16 @@ const Index = () => {
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
+
+      {isDemo && (
+        <div className="h-7 flex items-center justify-center gap-3 px-3 border-t border-border text-xs bg-yellow-500/10 text-yellow-300">
+          <Icon name="Info" size={12} />
+          <span>Демо-версия — редактирование доступно, сохранение и экспорт ограничены</span>
+          <Link to="/auth" className="px-2 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-medium hover:bg-primary/90 transition-colors">
+            Зарегистрироваться
+          </Link>
+        </div>
+      )}
 
       <div className="h-5 flex items-center justify-between px-3 border-t border-border text-[9px] text-muted-foreground" style={{ background: 'hsl(var(--editor-panel))' }}>
         <div className="flex items-center gap-3">

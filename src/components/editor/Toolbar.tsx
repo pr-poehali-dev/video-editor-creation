@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
 import useAuth from '@/hooks/use-auth';
+import { useDemo } from '@/contexts/demo-context';
 import { projects } from '@/lib/api';
+import { toast } from 'sonner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 import ProjectSettingsDialog from '@/components/editor/ProjectSettingsDialog';
@@ -20,6 +22,7 @@ const tools = [
 const Toolbar = () => {
   const { project, getProjectData, setActivePanel } = useEditorStore();
   const { user, isAuthenticated, loadProfile } = useAuth();
+  const { isDemo } = useDemo();
   const navigate = useNavigate();
   const [activeTool, setActiveTool] = useState('select');
   const [showProjectMenu, setShowProjectMenu] = useState(false);
@@ -75,6 +78,10 @@ const Toolbar = () => {
   }, []);
 
   const handleSave = useCallback(async () => {
+    if (isDemo) {
+      toast('Сохранение недоступно в демо-версии. Зарегистрируйтесь, чтобы сохранять проекты!');
+      return;
+    }
     if (!project.id || !isAuthenticated) return;
     if (savingRef.current) return;
     savingRef.current = true;
@@ -111,9 +118,13 @@ const Toolbar = () => {
       setSaving(false);
       savingRef.current = false;
     }
-  }, [project.id, isAuthenticated, getProjectData]);
+  }, [project.id, isAuthenticated, isDemo, getProjectData]);
 
   const handleNewProject = useCallback(async () => {
+    if (isDemo) {
+      toast('Создание проектов недоступно в демо-версии. Зарегистрируйтесь для полного доступа!');
+      return;
+    }
     if (!isAuthenticated) {
       navigate('/auth');
       return;
@@ -124,7 +135,7 @@ const Toolbar = () => {
       if (res.project?.id) navigate(`/editor/${res.project.id}`);
     } catch { /* ignore */ }
     setShowProjectMenu(false);
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, isDemo, navigate]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -142,12 +153,12 @@ const Toolbar = () => {
 
   useEffect(() => {
     if (autoSaveRef.current) clearInterval(autoSaveRef.current);
-    if (!autoSaveEnabled || !project.id || !isAuthenticated) return;
+    if (!autoSaveEnabled || !project.id || !isAuthenticated || isDemo) return;
     autoSaveRef.current = setInterval(() => {
       handleSaveRef.current();
     }, 60 * 1000);
     return () => { if (autoSaveRef.current) clearInterval(autoSaveRef.current); };
-  }, [autoSaveEnabled, project.id, isAuthenticated]);
+  }, [autoSaveEnabled, project.id, isAuthenticated, isDemo]);
 
   return (
     <div className="h-10 flex items-center justify-between px-3 border-b border-border" style={{ background: 'hsl(var(--editor-panel))' }}>
@@ -266,7 +277,12 @@ const Toolbar = () => {
           <TooltipContent><p className="text-[10px]">Магазин эффектов</p></TooltipContent>
         </Tooltip>
         <Separator orientation="vertical" className="h-5 bg-border/50" />
-        {isAuthenticated && user ? (
+        {isDemo ? (
+          <button onClick={() => navigate('/auth')} className="nle-button active flex items-center gap-1">
+            <Icon name="LogIn" size={11} />
+            <span className="text-[10px]">Войти</span>
+          </button>
+        ) : isAuthenticated && user ? (
           <button onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-secondary/50 transition-colors">
             <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center">
               <span className="text-[9px] font-bold text-primary">{user.name.charAt(0).toUpperCase()}</span>

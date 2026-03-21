@@ -2,6 +2,8 @@ import { useRef, useCallback, useState, useEffect } from 'react';
 import Icon from '@/components/ui/icon';
 import useEditorStore from '@/hooks/use-editor-store';
 import useAuth from '@/hooks/use-auth';
+import { useDemo } from '@/contexts/demo-context';
+import { toast } from 'sonner';
 import { media as mediaApi, shop } from '@/lib/api';
 import { generateAudio } from '@/lib/audio-synth';
 import { compressFile, formatCompressionInfo } from '@/hooks/useFileCompression';
@@ -152,6 +154,7 @@ const blobToBase64 = (blob: Blob): Promise<string> => {
 const MediaPanel = () => {
   const { assets, addAsset, removeAsset, setDraggingAsset, addClipFromAsset, getCompatibleTrack, currentTime, setCurrentTime, project, addClip, selectedClipId, updateClip, setPreviewFilter, setPurchasedFeatureSlugs, setActivePanel, setExportSettings, tracks } = useEditorStore();
   const { isAuthenticated } = useAuth();
+  const { isDemo } = useDemo();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [uploading, setUploading] = useState<string[]>([]);
@@ -371,6 +374,11 @@ const MediaPanel = () => {
       size: file.size,
     });
 
+    if (isDemo) {
+      toast('Файл добавлен локально. Загрузка на сервер недоступна в демо-версии.');
+      return;
+    }
+
     if (!isAuthenticated) return;
 
     let uploadTarget = file;
@@ -413,7 +421,7 @@ const MediaPanel = () => {
     } else {
       doUpload(uploadTarget, asset.id, duration, 1);
     }
-  }, [addAsset, isAuthenticated, doUpload, doChunkedUpload]);
+  }, [addAsset, isAuthenticated, isDemo, doUpload, doChunkedUpload]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
