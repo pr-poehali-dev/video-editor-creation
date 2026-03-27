@@ -42,6 +42,8 @@ interface ActiveClip {
   textAnimationPerLine?: boolean;
   textAnimationDuration?: number;
   textAnimationDelay?: number;
+  subtitleWords?: Array<{ word: string; start: number; end: number }>;
+  elapsed: number;
   opacity: number;
   clipVolume: number;
   startTime: number;
@@ -207,6 +209,8 @@ const PreviewPanel = () => {
             textAnimationPerLine: clip.textAnimationPerLine,
             textAnimationDuration: clip.textAnimationDuration,
             textAnimationDelay: clip.textAnimationDelay,
+            subtitleWords: clip.subtitleWords,
+            elapsed,
             opacity: clip.opacity,
             clipVolume: clip.volume,
             startTime: clip.startTime,
@@ -700,15 +704,16 @@ const PreviewPanel = () => {
                 const perLine = clip.textAnimationPerLine ?? false;
                 const animDur = clip.textAnimationDuration ?? 0.5;
                 const animDelay = clip.textAnimationDelay ?? 0.3;
-                const elapsed = currentTime - clip.startTime;
+                const clipElapsed = clip.elapsed;
                 const fullText = clip.text || clip.name;
+                const hasSubWords = clip.subtitleWords && clip.subtitleWords.length > 0;
                 const lines = perLine ? fullText.split('\n').filter(l => l.length > 0) : [fullText];
                 if (lines.length === 0) lines.push(fullText);
 
                 const getLineStyle = (lineIdx: number): React.CSSProperties => {
                   if (anim === 'none') return { opacity: clip.opacity };
                   const lineStart = lineIdx * animDelay;
-                  const progress = Math.max(0, Math.min(1, (elapsed - lineStart) / animDur));
+                  const progress = Math.max(0, Math.min(1, (clipElapsed - lineStart) / animDur));
                   const ease = progress * progress * (3 - 2 * progress);
                   if (progress <= 0) return { opacity: 0 };
                   switch (anim) {
@@ -811,23 +816,60 @@ const PreviewPanel = () => {
                             <span style={{ fontSize, visibility: 'hidden', fontWeight: weight, fontFamily }}>{fullText}</span>
                           </div>
                         )}
-                        <span
-                          style={{
-                            fontSize,
-                            fontFamily,
-                            color: clip.fontColor || '#ffffff',
-                            fontWeight: weight,
-                            textShadow: shadowStyle,
-                            WebkitTextStroke: stroke > 0 ? `${stroke}px ${strokeColor}` : undefined,
-                            paintOrder: stroke > 0 ? 'stroke fill' : undefined,
-                            position: 'relative',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: textW ? 'break-word' : undefined,
-                            ...getLineStyle(0),
-                          }}
-                        >
-                          {fullText}
-                        </span>
+                        {hasSubWords ? (
+                          <span
+                            style={{
+                              fontSize,
+                              fontFamily,
+                              fontWeight: weight,
+                              textShadow: shadowStyle,
+                              WebkitTextStroke: stroke > 0 ? `${stroke}px ${strokeColor}` : undefined,
+                              paintOrder: stroke > 0 ? 'stroke fill' : undefined,
+                              position: 'relative',
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: textW ? 'break-word' : undefined,
+                              ...getLineStyle(0),
+                            }}
+                          >
+                            {clip.subtitleWords!.map((sw, wi) => {
+                              const isActive = clipElapsed >= sw.start && clipElapsed < sw.end;
+                              const isPast = clipElapsed >= sw.end;
+                              const wordProgress = isActive ? Math.min(1, (clipElapsed - sw.start) / Math.max(0.05, sw.end - sw.start)) : 0;
+                              return (
+                                <span
+                                  key={wi}
+                                  style={{
+                                    color: isActive || isPast ? '#FFD700' : (clip.fontColor || '#ffffff'),
+                                    transform: isActive ? `scale(${1 + wordProgress * 0.08})` : undefined,
+                                    display: 'inline-block',
+                                    transition: 'color 0.1s, transform 0.1s',
+                                    marginRight: '0.2em',
+                                  }}
+                                >
+                                  {sw.word}
+                                </span>
+                              );
+                            })}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize,
+                              fontFamily,
+                              color: clip.fontColor || '#ffffff',
+                              fontWeight: weight,
+                              textShadow: shadowStyle,
+                              WebkitTextStroke: stroke > 0 ? `${stroke}px ${strokeColor}` : undefined,
+                              paintOrder: stroke > 0 ? 'stroke fill' : undefined,
+                              position: 'relative',
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: textW ? 'break-word' : undefined,
+                              ...getLineStyle(0),
+                            }}
+                          >
+                            {fullText}
+                          </span>
+                        )}
                       </>
                     )}
                   </div>

@@ -4,7 +4,7 @@ import useEditorStore from '@/hooks/use-editor-store';
 import useAuth from '@/hooks/use-auth';
 import { useDemo } from '@/contexts/demo-context';
 import { toast } from 'sonner';
-import { media as mediaApi, shop } from '@/lib/api';
+import { media as mediaApi, shop, speechToText } from '@/lib/api';
 import { generateAudio } from '@/lib/audio-synth';
 import { compressFile, formatCompressionInfo } from '@/hooks/useFileCompression';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -561,36 +561,121 @@ const MediaPanel = () => {
     });
   }, [getCompatibleTrack, addClip, currentTime]);
 
+  const handleAutoSubtitles = useCallback(() => {
+    if (aiSubtitlesLoading) return;
+    const state = useEditorStore.getState();
+    const audioClip = state.tracks
+      .filter(t => t.type === 'audio')
+      .flatMap(t => t.clips)
+      .sort((a, b) => a.startTime - b.startTime)[0];
+    if (!audioClip) {
+      toast.error('Добавьте аудио на таймлайн');
+      return;
+    }
+    const audioAsset = state.assets.find(a => a.id === audioClip.assetId);
+    if (!audioAsset?.url) {
+      toast.error('Аудиофайл ещё загружается');
+      return;
+    }
+    setAiSubtitlesLoading(true);
+    toast.info('Распознаю речь...');
+    (async () => {
+      try {
+        const res = await speechToText.transcribe({
+          audio_url: audioAsset.url,
+          file_name: audioAsset.name,
+        });
+        const words: Array<{ word: string; start: number; end: number }> = (res as Record<string, unknown>).words as Array<{ word: string; start: number; end: number }> || [];
+        if (words.length === 0) {
+          toast.error('Речь не распознана');
+          setAiSubtitlesLoading(false);
+          return;
+        }
+        const segments: Array<{ text: string; start: number; end: number; words: typeof words }> = [];
+        const segData = (res as Record<string, unknown>).segments as Array<{ text: string; start: number; end: number }> || [];
+        if (segData.length > 0) {
+          for (const seg of segData) {
+            const segWords = words.filter(w => w.start >= seg.start - 0.05 && w.end <= seg.end + 0.05);
+            segments.push({ text: seg.text.trim(), start: seg.start, end: seg.end, words: segWords });
+          }
+        } else {
+          let chunk: typeof words = [];
+          for (const w of words) {
+            chunk.push(w);
+            if (chunk.length >= 6 || w.word.endsWith('.') || w.word.endsWith('?') || w.word.endsWith('!')) {
+              segments.push({
+                text: chunk.map(c => c.word).join(' '),
+                start: chunk[0].start,
+                end: chunk[chunk.length - 1].end,
+                words: [...chunk],
+              });
+              chunk = [];
+            }
+          }
+          if (chunk.length > 0) {
+            segments.push({
+              text: chunk.map(c => c.word).join(' '),
+              start: chunk[0].start,
+              end: chunk[chunk.length - 1].end,
+              words: [...chunk],
+            });
+          }
+        }
+        const audioStart = audioClip.startTime;
+        const audioDuration = audioClip.duration;
+        const imageClips = state.tracks
+          .filter(t => t.type === 'video')
+          .flatMap(t => t.clips.filter(c => c.type === 'image'));
+        for (const img of imageClips) {
+          if (img.startTime <= audioStart && img.duration < audioDuration) {
+            updateClip(img.id, { duration: audioStart + audioDuration - img.startTime });
+          }
+        }
+        const textTrackId = getCompatibleTrack('text');
+        for (const seg of segments) {
+          const segStart = audioStart + seg.start;
+          const segDur = Math.max(0.3, seg.end - seg.start);
+          const segWords = seg.words.map(w => ({
+            word: w.word,
+            start: w.start - seg.start,
+            end: w.end - seg.start,
+          }));
+          addClip(textTrackId, {
+            type: 'text',
+            startTime: segStart,
+            duration: segDur,
+            name: 'Субтитр',
+            text: seg.text,
+            fontSize: 28,
+            fontFamily: 'Inter',
+            fontColor: '#ffffff',
+            fontWeight: 600,
+            textBg: true,
+            textBgColor: '#000000',
+            textBgOpacity: 0.65,
+            textShadow: 2,
+            textAlign: 'center',
+            positionY: 85,
+            subtitleWords: segWords,
+          });
+        }
+        toast.success(`Создано ${segments.length} субтитров`);
+      } catch (e: unknown) {
+        console.error('Speech-to-text error:', e);
+        const errMsg = e && typeof e === 'object' && 'error' in e ? (e as { error: string }).error : 'Ошибка распознавания речи';
+        toast.error(errMsg);
+      } finally {
+        setAiSubtitlesLoading(false);
+      }
+    })();
+  }, [aiSubtitlesLoading, getCompatibleTrack, addClip, updateClip]);
+
   const handleFeatureClick = useCallback((slug: string) => {
     if (slug === 'feature-4k-export') {
       setActivePanel('export');
       setExportSettings({ format: 'mp4', quality: 'ultra', resolution: '3840x2160', fps: 30, codec: 'H.264', bitrate: 20000 });
     } else if (slug === 'feature-ai-subtitles') {
-      setAiSubtitlesLoading(true);
-      setTimeout(() => {
-        const trackId = getCompatibleTrack('text');
-        const subs = [
-          { text: 'Пример субтитров', start: 0, dur: 3 },
-          { text: 'Сгенерировано ИИ', start: 3.5, dur: 2.5 },
-          { text: 'Автоматическое распознавание', start: 6.5, dur: 3 },
-          { text: 'Субтитры готовы!', start: 10, dur: 2 },
-        ];
-        for (const sub of subs) {
-          addClip(trackId, {
-            type: 'text',
-            startTime: sub.start,
-            duration: sub.dur,
-            name: 'AI Субтитр',
-            text: sub.text,
-            fontSize: 24,
-            fontColor: '#ffffff',
-            textBg: true,
-            textBgColor: '#000000',
-            textBgOpacity: 0.6,
-          });
-        }
-        setAiSubtitlesLoading(false);
-      }, 2000);
+      handleAutoSubtitles();
     } else if (slug === 'feature-green-screen') {
       if (!selectedClipId) return;
       const state = useEditorStore.getState();
@@ -615,7 +700,7 @@ const MediaPanel = () => {
         setActivePanel('properties');
       }
     }
-  }, [selectedClipId, updateClip, setActivePanel, setExportSettings, getCompatibleTrack, addClip]);
+  }, [selectedClipId, updateClip, setActivePanel, setExportSettings, getCompatibleTrack, addClip, handleAutoSubtitles]);
 
   const purchasedEffects = purchases.filter(p => p.category === 'effects');
   const purchasedTransitions = purchases.filter(p => p.category === 'transitions');
@@ -972,6 +1057,24 @@ const MediaPanel = () => {
                   </div>
                 </div>
               ))}
+
+              <div className="mt-3 mb-2">
+                <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 px-1 flex items-center gap-1">
+                  <Icon name="AudioLines" size={10} className="text-cyan-400" /> Авто-субтитры
+                </div>
+                <div
+                  onClick={handleAutoSubtitles}
+                  className={`flex items-center gap-2.5 p-2.5 rounded-lg border transition-colors ${aiSubtitlesLoading ? 'border-primary/30 bg-primary/5 cursor-wait' : 'border-cyan-500/20 bg-cyan-500/5 hover:bg-cyan-500/10 cursor-pointer'}`}
+                >
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-cyan-500/15 shrink-0">
+                    <Icon name={aiSubtitlesLoading ? 'Loader2' : 'Captions'} size={16} className={`text-cyan-400 ${aiSubtitlesLoading ? 'animate-spin' : ''}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-medium">{aiSubtitlesLoading ? 'Распознаю речь...' : 'Создать из аудио'}</div>
+                    <div className="text-[9px] text-muted-foreground">Автораспознавание речи с таймкодами</div>
+                  </div>
+                </div>
+              </div>
 
               {purchasedTitles.length > 0 && (
                 <div className="mt-2">

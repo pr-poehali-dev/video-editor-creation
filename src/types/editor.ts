@@ -39,6 +39,7 @@ export interface TimelineClip {
   textAnimationPerLine?: boolean;
   textAnimationDuration?: number;
   textAnimationDelay?: number;
+  subtitleWords?: SubtitleWord[];
   opacity: number;
   volume: number;
   speed: number;
@@ -82,6 +83,19 @@ export interface Keyframe {
   property: string;
   value: number;
   easing: 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
+}
+
+export interface SubtitleWord {
+  word: string;
+  start: number;
+  end: number;
+}
+
+export interface SubtitleSegment {
+  text: string;
+  start: number;
+  end: number;
+  words: SubtitleWord[];
 }
 
 export interface ProjectSettings {

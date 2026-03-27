@@ -143,4 +143,9 @@ export const media = {
     request(urls.media, `/presign?id=${id}`),
 };
 
-export default { auth, wallet, projects, admin, shop, media };
+export const speechToText = {
+  transcribe: (data: { audio_url?: string; audio_data?: string; file_name?: string }) =>
+    request(urls['speech-to-text'], '/', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+export default { auth, wallet, projects, admin, shop, media, speechToText };
