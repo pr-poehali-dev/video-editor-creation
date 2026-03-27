@@ -96,7 +96,7 @@ def transcribe_audio(audio_bytes=None, audio_url=None, api_key=''):
     transcript = aai_request('/transcript', method='POST', body={
         'audio_url': upload_url,
         'language_detection': True,
-        'speech_model': 'universal-2',
+        'speech_models': ['universal-2'],
     }, api_key=api_key)
 
     transcript_id = transcript['id']
