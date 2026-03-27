@@ -1,7 +1,8 @@
-"""Распознавание речи из аудиофайла с пословными таймкодами (OpenAI Whisper)"""
+"""Распознавание речи из аудиофайла с пословными таймкодами (AssemblyAI)"""
 import json
 import os
 import base64
+import time
 import urllib.request
 import psycopg2
 
@@ -11,6 +12,8 @@ CORS = {
     'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token',
     'Access-Control-Max-Age': '86400',
 }
+
+AAI_BASE = 'https://api.assemblyai.com/v2'
 
 
 def get_db():
@@ -34,37 +37,56 @@ def get_user_by_token(conn, token):
     return {'id': row[0], 'email': row[1], 'name': row[2]}
 
 
-def transcribe_audio(audio_bytes, file_name='audio.mp3'):
-    """Send audio to OpenAI Whisper API and get word-level timestamps"""
-    api_key = os.environ.get('OPENAI_API_KEY', '')
-    if not api_key:
-        raise ValueError('OPENAI_API_KEY not configured')
+def aai_request(path, method='GET', body=None, api_key=''):
+    url = f'{AAI_BASE}{path}'
+    data = json.dumps(body).encode() if body else None
+    req = urllib.request.Request(url, data=data, method=method, headers={
+        'Authorization': api_key,
+        'Content-Type': 'application/json',
+    })
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        return json.loads(resp.read().decode())
 
-    boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW'
-    
-    body_parts = []
-    body_parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1'.encode())
-    body_parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\nverbose_json'.encode())
-    body_parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="timestamp_granularities[]"\r\n\r\nword'.encode())
-    body_parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{file_name}"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode() + audio_bytes)
-    body_parts.append(f'--{boundary}--\r\n'.encode())
-    
-    body = b'\r\n'.join(body_parts)
-    
+
+def aai_upload(audio_bytes, api_key):
     req = urllib.request.Request(
-        'https://api.openai.com/v1/audio/transcriptions',
-        data=body,
-        headers={
-            'Authorization': f'Bearer {api_key}',
-            'Content-Type': f'multipart/form-data; boundary={boundary}',
-        },
+        f'{AAI_BASE}/upload',
+        data=audio_bytes,
         method='POST',
+        headers={
+            'Authorization': api_key,
+            'Content-Type': 'application/octet-stream',
+            'Transfer-Encoding': 'chunked',
+        },
     )
-    
     with urllib.request.urlopen(req, timeout=120) as resp:
         result = json.loads(resp.read().decode())
-    
-    return result
+    return result['upload_url']
+
+
+def transcribe_audio(audio_bytes=None, audio_url=None, api_key=''):
+    if audio_bytes:
+        upload_url = aai_upload(audio_bytes, api_key)
+    else:
+        upload_url = audio_url
+
+    transcript = aai_request('/transcript', method='POST', body={
+        'audio_url': upload_url,
+        'language_detection': True,
+    }, api_key=api_key)
+
+    transcript_id = transcript['id']
+
+    for _ in range(120):
+        result = aai_request(f'/transcript/{transcript_id}', api_key=api_key)
+        status = result.get('status')
+        if status == 'completed':
+            return result
+        if status == 'error':
+            raise ValueError(result.get('error', 'Transcription failed'))
+        time.sleep(2)
+
+    raise ValueError('Transcription timed out')
 
 
 def handler(event, context):
@@ -86,6 +108,10 @@ def handler(event, context):
     finally:
         conn.close()
 
+    api_key = os.environ.get('ASSEMBLYAI_API_KEY', '')
+    if not api_key:
+        return {'statusCode': 500, 'headers': CORS, 'body': json.dumps({'error': 'ASSEMBLYAI_API_KEY not configured'})}
+
     body = event.get('body', '{}')
     if event.get('isBase64Encoded'):
         body = base64.b64decode(body).decode()
@@ -93,51 +119,65 @@ def handler(event, context):
 
     audio_url = data.get('audio_url', '')
     audio_b64 = data.get('audio_data', '')
-    file_name = data.get('file_name', 'audio.mp3')
 
     if not audio_url and not audio_b64:
         return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'audio_url or audio_data required'})}
 
+    audio_bytes = None
     if audio_b64:
         if ',' in audio_b64:
             audio_b64 = audio_b64.split(',', 1)[1]
         audio_bytes = base64.b64decode(audio_b64)
-    else:
-        req = urllib.request.Request(audio_url)
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            audio_bytes = resp.read()
+        max_size = 100 * 1024 * 1024
+        if len(audio_bytes) > max_size:
+            return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Audio file too large. Max 100MB.'})}
 
-    max_size = 25 * 1024 * 1024
-    if len(audio_bytes) > max_size:
-        return {'statusCode': 400, 'headers': CORS, 'body': json.dumps({'error': 'Audio file too large. Max 25MB for transcription.'})}
-
-    result = transcribe_audio(audio_bytes, file_name)
+    result = transcribe_audio(
+        audio_bytes=audio_bytes,
+        audio_url=audio_url if not audio_bytes else None,
+        api_key=api_key,
+    )
 
     words = []
-    if 'words' in result:
-        for w in result['words']:
-            words.append({
-                'word': w.get('word', ''),
-                'start': round(w.get('start', 0), 3),
-                'end': round(w.get('end', 0), 3),
-            })
+    for w in (result.get('words') or []):
+        words.append({
+            'word': w.get('text', ''),
+            'start': round(w.get('start', 0) / 1000, 3),
+            'end': round(w.get('end', 0) / 1000, 3),
+        })
 
     segments = []
-    if 'segments' in result:
-        for seg in result['segments']:
+    current_seg_words = []
+    for w in words:
+        current_seg_words.append(w)
+        word_text = w['word']
+        if (len(current_seg_words) >= 8 or
+                word_text.endswith('.') or word_text.endswith('?') or
+                word_text.endswith('!') or word_text.endswith(',')):
             segments.append({
-                'text': seg.get('text', ''),
-                'start': round(seg.get('start', 0), 3),
-                'end': round(seg.get('end', 0), 3),
+                'text': ' '.join(sw['word'] for sw in current_seg_words),
+                'start': current_seg_words[0]['start'],
+                'end': current_seg_words[-1]['end'],
             })
+            current_seg_words = []
+    if current_seg_words:
+        segments.append({
+            'text': ' '.join(sw['word'] for sw in current_seg_words),
+            'start': current_seg_words[0]['start'],
+            'end': current_seg_words[-1]['end'],
+        })
+
+    full_text = result.get('text', '')
+    language = result.get('language_code', '')
+    duration = round(result.get('audio_duration', 0), 3)
 
     return {
         'statusCode': 200,
         'headers': CORS,
         'body': json.dumps({
-            'text': result.get('text', ''),
-            'language': result.get('language', ''),
-            'duration': result.get('duration', 0),
+            'text': full_text,
+            'language': language,
+            'duration': duration,
             'words': words,
             'segments': segments,
         }),
