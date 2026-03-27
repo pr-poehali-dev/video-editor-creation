@@ -621,6 +621,67 @@ const PropertiesPanel = () => {
                 </div>
               </div>
 
+              {selectedClip.subtitleWords && selectedClip.subtitleWords.length > 0 && (
+                <>
+                  <Separator className="bg-border/50" />
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Icon name="Captions" size={10} className="text-amber-400" />
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Субтитры</span>
+                    </div>
+
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground">Режим появления</Label>
+                      <div className="grid grid-cols-2 gap-1 mt-1">
+                        {([
+                          ['highlight', 'Подсветка', 'Highlighter'],
+                          ['reveal', 'Появление', 'TextCursorInput'],
+                        ] as const).map(([val, label, icon]) => (
+                          <button
+                            key={val}
+                            onClick={() => updateClip(selectedClip.id, { subtitleMode: val })}
+                            className={`flex flex-col items-center gap-0.5 py-1.5 px-1 rounded text-[8px] transition-colors ${
+                              (selectedClip.subtitleMode || 'highlight') === val
+                                ? 'bg-amber-500/20 border border-amber-500/40 text-amber-300'
+                                : 'bg-secondary/50 hover:bg-secondary border border-transparent text-muted-foreground'
+                            }`}
+                          >
+                            <Icon name={icon} size={12} />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[8px] text-muted-foreground/60 mt-1">
+                        {(selectedClip.subtitleMode || 'highlight') === 'highlight'
+                          ? 'Весь текст виден, слова подсвечиваются по мере речи'
+                          : 'Слова появляются по одному вслед за речью'}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Цвет текста</Label>
+                        <Input
+                          type="color"
+                          value={selectedClip.subtitleBaseColor || selectedClip.fontColor || '#ffffff'}
+                          onChange={e => updateClip(selectedClip.id, { subtitleBaseColor: e.target.value })}
+                          className="h-7 mt-0.5 p-0.5 bg-secondary/50 border-border cursor-pointer"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Цвет активного</Label>
+                        <Input
+                          type="color"
+                          value={selectedClip.subtitleActiveColor || '#FFD700'}
+                          onChange={e => updateClip(selectedClip.id, { subtitleActiveColor: e.target.value })}
+                          className="h-7 mt-0.5 p-0.5 bg-secondary/50 border-border cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
               <Separator className="bg-border/50" />
               <div className="space-y-2">
                 <div className="flex items-center gap-1.5">

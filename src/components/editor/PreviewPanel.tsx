@@ -816,42 +816,63 @@ const PreviewPanel = () => {
                             <span style={{ fontSize, visibility: 'hidden', fontWeight: weight, fontFamily }}>{fullText}</span>
                           </div>
                         )}
-                        {hasSubWords ? (
-                          <span
-                            style={{
-                              fontSize,
-                              fontFamily,
-                              fontWeight: weight,
-                              textShadow: shadowStyle,
-                              WebkitTextStroke: stroke > 0 ? `${stroke}px ${strokeColor}` : undefined,
-                              paintOrder: stroke > 0 ? 'stroke fill' : undefined,
-                              position: 'relative',
-                              whiteSpace: 'pre-wrap',
-                              wordBreak: textW ? 'break-word' : undefined,
-                              ...getLineStyle(0),
-                            }}
-                          >
-                            {clip.subtitleWords!.map((sw, wi) => {
-                              const isActive = clipElapsed >= sw.start && clipElapsed < sw.end;
-                              const isPast = clipElapsed >= sw.end;
-                              const wordProgress = isActive ? Math.min(1, (clipElapsed - sw.start) / Math.max(0.05, sw.end - sw.start)) : 0;
-                              return (
-                                <span
-                                  key={wi}
-                                  style={{
-                                    color: isActive || isPast ? '#FFD700' : (clip.fontColor || '#ffffff'),
-                                    transform: isActive ? `scale(${1 + wordProgress * 0.08})` : undefined,
-                                    display: 'inline-block',
-                                    transition: 'color 0.1s, transform 0.1s',
-                                    marginRight: '0.2em',
-                                  }}
-                                >
-                                  {sw.word}
-                                </span>
-                              );
-                            })}
-                          </span>
-                        ) : (
+                        {hasSubWords ? (() => {
+                          const subMode = clip.subtitleMode || 'highlight';
+                          const baseColor = clip.subtitleBaseColor || clip.fontColor || '#ffffff';
+                          const activeColor = clip.subtitleActiveColor || '#FFD700';
+                          return (
+                            <span
+                              style={{
+                                fontSize,
+                                fontFamily,
+                                fontWeight: weight,
+                                textShadow: shadowStyle,
+                                WebkitTextStroke: stroke > 0 ? `${stroke}px ${strokeColor}` : undefined,
+                                paintOrder: stroke > 0 ? 'stroke fill' : undefined,
+                                position: 'relative',
+                                whiteSpace: 'pre-wrap',
+                                wordBreak: textW ? 'break-word' : undefined,
+                                ...getLineStyle(0),
+                              }}
+                            >
+                              {clip.subtitleWords!.map((sw, wi) => {
+                                const isActive = clipElapsed >= sw.start && clipElapsed < sw.end;
+                                const isPast = clipElapsed >= sw.end;
+                                const isFuture = clipElapsed < sw.start;
+                                const wordProgress = isActive ? Math.min(1, (clipElapsed - sw.start) / Math.max(0.05, sw.end - sw.start)) : 0;
+                                if (subMode === 'reveal' && isFuture) {
+                                  return (
+                                    <span
+                                      key={wi}
+                                      style={{
+                                        display: 'inline-block',
+                                        marginRight: '0.2em',
+                                        opacity: 0,
+                                      }}
+                                    >
+                                      {sw.word}
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span
+                                    key={wi}
+                                    style={{
+                                      color: isActive || isPast ? activeColor : baseColor,
+                                      transform: isActive ? `scale(${1 + wordProgress * 0.08})` : undefined,
+                                      display: 'inline-block',
+                                      transition: 'color 0.1s, transform 0.1s',
+                                      marginRight: '0.2em',
+                                      ...(subMode === 'reveal' && isActive ? { opacity: 0.5 + wordProgress * 0.5 } : {}),
+                                    }}
+                                  >
+                                    {sw.word}
+                                  </span>
+                                );
+                              })}
+                            </span>
+                          );
+                        })() : (
                           <span
                             style={{
                               fontSize,

@@ -40,6 +40,9 @@ export interface TimelineClip {
   textAnimationDuration?: number;
   textAnimationDelay?: number;
   subtitleWords?: SubtitleWord[];
+  subtitleMode?: 'highlight' | 'reveal';
+  subtitleBaseColor?: string;
+  subtitleActiveColor?: string;
   opacity: number;
   volume: number;
   speed: number;
