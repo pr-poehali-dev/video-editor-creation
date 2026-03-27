@@ -4,6 +4,7 @@ import os
 import base64
 import time
 import urllib.request
+import urllib.error
 import psycopg2
 
 CORS = {
@@ -44,8 +45,13 @@ def aai_request(path, method='GET', body=None, api_key=''):
         'Authorization': api_key,
         'Content-Type': 'application/json',
     })
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        return json.loads(resp.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode() if e.fp else ''
+        print(f'[AAI ERROR] {e.code} {path}: {error_body}')
+        raise
 
 
 def aai_upload(audio_bytes, api_key):
@@ -56,19 +62,36 @@ def aai_upload(audio_bytes, api_key):
         headers={
             'Authorization': api_key,
             'Content-Type': 'application/octet-stream',
-            'Transfer-Encoding': 'chunked',
         },
     )
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        result = json.loads(resp.read().decode())
-    return result['upload_url']
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            result = json.loads(resp.read().decode())
+        return result['upload_url']
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode() if e.fp else ''
+        print(f'[AAI UPLOAD ERROR] {e.code}: {error_body}')
+        raise
+
+
+def download_audio(url):
+    req = urllib.request.Request(url)
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return resp.read()
 
 
 def transcribe_audio(audio_bytes=None, audio_url=None, api_key=''):
-    if audio_bytes:
-        upload_url = aai_upload(audio_bytes, api_key)
-    else:
-        upload_url = audio_url
+    if not audio_bytes and audio_url:
+        print(f'[INFO] Downloading audio from URL: {audio_url[:100]}')
+        audio_bytes = download_audio(audio_url)
+        print(f'[INFO] Downloaded {len(audio_bytes)} bytes')
+
+    if not audio_bytes:
+        raise ValueError('No audio data provided')
+
+    print(f'[INFO] Uploading {len(audio_bytes)} bytes to AssemblyAI')
+    upload_url = aai_upload(audio_bytes, api_key)
+    print(f'[INFO] Upload done, URL: {upload_url[:80]}')
 
     transcript = aai_request('/transcript', method='POST', body={
         'audio_url': upload_url,
@@ -76,11 +99,13 @@ def transcribe_audio(audio_bytes=None, audio_url=None, api_key=''):
     }, api_key=api_key)
 
     transcript_id = transcript['id']
+    print(f'[INFO] Transcript created: {transcript_id}')
 
     for _ in range(120):
         result = aai_request(f'/transcript/{transcript_id}', api_key=api_key)
         status = result.get('status')
         if status == 'completed':
+            print(f'[INFO] Transcription completed')
             return result
         if status == 'error':
             raise ValueError(result.get('error', 'Transcription failed'))
