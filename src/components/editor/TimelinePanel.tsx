@@ -533,21 +533,38 @@ const TimelinePanel = () => {
             style={{ left: contextMenu.x, top: contextMenu.y, background: 'hsl(var(--popover))' }}
           >
             <div className="p-1">
-              <label className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50 transition-colors cursor-pointer">
-                <Icon name="Palette" size={11} />
-                <span className="flex-1">Цвет клипа</span>
-                <input
-                  type="color"
-                  value={ctxClip?.color || '#3b82f6'}
-                  onChange={(e) => updateClip(contextMenu.clipId, { color: e.target.value })}
-                  className="w-5 h-5 rounded border-0 cursor-pointer p-0 bg-transparent"
-                />
-              </label>
-              {ctxClip?.color && (
-                <button onClick={() => { updateClip(contextMenu.clipId, { color: undefined }); closeContextMenu(); }} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50 transition-colors text-muted-foreground">
-                  <Icon name="RotateCcw" size={11} /> Сбросить цвет
-                </button>
-              )}
+              <div className="px-2 py-1.5">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Icon name="Palette" size={11} className="text-muted-foreground" />
+                  <span className="text-[10px] text-muted-foreground">Цвет клипа</span>
+                </div>
+                <div className="grid grid-cols-7 gap-1">
+                  {['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#f43f5e','#14b8a6','#6366f1','#a855f7','#78716c','#475569'].map(c => (
+                    <button
+                      key={c}
+                      onClick={() => updateClip(contextMenu.clipId, { color: c })}
+                      className={`w-5 h-5 rounded-sm border transition-transform hover:scale-110 ${ctxClip?.color === c ? 'border-white ring-1 ring-white/50 scale-110' : 'border-white/10'}`}
+                      style={{ background: c }}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-1 mt-1.5">
+                  <label className="flex-1 flex items-center gap-1 text-[10px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                    <input
+                      type="color"
+                      value={ctxClip?.color || '#3b82f6'}
+                      onChange={(e) => updateClip(contextMenu.clipId, { color: e.target.value })}
+                      className="w-4 h-4 rounded border-0 cursor-pointer p-0 bg-transparent"
+                    />
+                    Свой цвет
+                  </label>
+                  {ctxClip?.color && (
+                    <button onClick={() => updateClip(contextMenu.clipId, { color: undefined })} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+                      Сброс
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="h-px bg-border/50 my-0.5" />
               <button onClick={() => { splitClip(contextMenu.clipId, currentTime); closeContextMenu(); }} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50 transition-colors">
                 <Icon name="Scissors" size={11} /> Разрезать
