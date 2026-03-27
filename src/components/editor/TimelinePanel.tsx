@@ -50,7 +50,7 @@ const TimelinePanel = () => {
     toggleTrackMute, toggleTrackLock, toggleTrackVisibility,
     addTrack, splitClip, duplicateClip, resizeClip,
     addClipFromAsset, draggingAsset, setDraggingAsset,
-    removeTrack,
+    removeTrack, updateClip,
   } = useEditorStore();
 
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -454,6 +454,7 @@ const TimelinePanel = () => {
                         left: clip.startTime * pps,
                         width: Math.max(clipWidth, 8),
                         height: track.height - 8,
+                        ...(clip.color ? { background: clip.color } : {}),
                       }}
                       onMouseDown={(e) => handleClipMouseDown(e, clip.id, 'move', track.id)}
                       onContextMenu={(e) => handleClipContextMenu(e, clip.id)}
@@ -524,25 +525,44 @@ const TimelinePanel = () => {
         </div>
       </div>
 
-      {contextMenu && (
-        <div
-          className="fixed z-50 min-w-[150px] rounded-md border border-border shadow-xl animate-in fade-in-0 zoom-in-95"
-          style={{ left: contextMenu.x, top: contextMenu.y, background: 'hsl(var(--popover))' }}
-        >
-          <div className="p-1">
-            <button onClick={() => { splitClip(contextMenu.clipId, currentTime); closeContextMenu(); }} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50 transition-colors">
-              <Icon name="Scissors" size={11} /> Разрезать
-            </button>
-            <button onClick={() => { duplicateClip(contextMenu.clipId); closeContextMenu(); }} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50 transition-colors">
-              <Icon name="Copy" size={11} /> Дублировать
-            </button>
-            <div className="h-px bg-border/50 my-0.5" />
-            <button onClick={() => { removeClip(contextMenu.clipId); closeContextMenu(); }} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-destructive/20 text-destructive transition-colors">
-              <Icon name="Trash2" size={11} /> Удалить
-            </button>
+      {contextMenu && (() => {
+        const ctxClip = tracks.flatMap(t => t.clips).find(c => c.id === contextMenu.clipId);
+        return (
+          <div
+            className="fixed z-50 min-w-[170px] rounded-md border border-border shadow-xl animate-in fade-in-0 zoom-in-95"
+            style={{ left: contextMenu.x, top: contextMenu.y, background: 'hsl(var(--popover))' }}
+          >
+            <div className="p-1">
+              <label className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50 transition-colors cursor-pointer">
+                <Icon name="Palette" size={11} />
+                <span className="flex-1">Цвет клипа</span>
+                <input
+                  type="color"
+                  value={ctxClip?.color || '#3b82f6'}
+                  onChange={(e) => updateClip(contextMenu.clipId, { color: e.target.value })}
+                  className="w-5 h-5 rounded border-0 cursor-pointer p-0 bg-transparent"
+                />
+              </label>
+              {ctxClip?.color && (
+                <button onClick={() => { updateClip(contextMenu.clipId, { color: undefined }); closeContextMenu(); }} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50 transition-colors text-muted-foreground">
+                  <Icon name="RotateCcw" size={11} /> Сбросить цвет
+                </button>
+              )}
+              <div className="h-px bg-border/50 my-0.5" />
+              <button onClick={() => { splitClip(contextMenu.clipId, currentTime); closeContextMenu(); }} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50 transition-colors">
+                <Icon name="Scissors" size={11} /> Разрезать
+              </button>
+              <button onClick={() => { duplicateClip(contextMenu.clipId); closeContextMenu(); }} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-secondary/50 transition-colors">
+                <Icon name="Copy" size={11} /> Дублировать
+              </button>
+              <div className="h-px bg-border/50 my-0.5" />
+              <button onClick={() => { removeClip(contextMenu.clipId); closeContextMenu(); }} className="flex items-center gap-2 w-full px-2 py-1.5 text-xs rounded hover:bg-destructive/20 text-destructive transition-colors">
+                <Icon name="Trash2" size={11} /> Удалить
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {draggingAsset && (
         <div className="absolute inset-0 pointer-events-none z-40 flex items-center justify-center">
