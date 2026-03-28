@@ -43,6 +43,9 @@ interface ActiveClip {
   textAnimationDuration?: number;
   textAnimationDelay?: number;
   subtitleWords?: Array<{ word: string; start: number; end: number }>;
+  subtitleMode?: string;
+  subtitleBaseColor?: string;
+  subtitleActiveColor?: string;
   elapsed: number;
   opacity: number;
   clipVolume: number;
@@ -210,6 +213,9 @@ const PreviewPanel = () => {
             textAnimationDuration: clip.textAnimationDuration,
             textAnimationDelay: clip.textAnimationDelay,
             subtitleWords: clip.subtitleWords,
+            subtitleMode: clip.subtitleMode,
+            subtitleBaseColor: clip.subtitleBaseColor,
+            subtitleActiveColor: clip.subtitleActiveColor,
             elapsed,
             opacity: clip.opacity,
             clipVolume: clip.volume,
