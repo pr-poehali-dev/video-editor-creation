@@ -459,7 +459,7 @@ const TimelinePanel = () => {
 
         <div
           ref={timelineRef}
-          className={`flex-1 overflow-x-auto overflow-y-auto editor-scrollbar relative ${draggingAsset ? 'ring-1 ring-primary/30 ring-inset' : ''}`}
+          className={`flex-1 overflow-x-auto overflow-y-auto editor-scrollbar ${draggingAsset ? 'ring-1 ring-primary/30 ring-inset' : ''}`}
           style={{ background: 'hsl(var(--editor-timeline))' }}
           onWheel={handleZoomWheel}
           onDragOver={handleDragOver}
