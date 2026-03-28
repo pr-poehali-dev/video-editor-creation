@@ -466,7 +466,7 @@ const TimelinePanel = () => {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <div className="relative" style={{ width: totalWidth, minWidth: '100%' }}>
+          <div className="relative" style={{ width: totalWidth, minWidth: '100%' }} onClick={handleTimelineClick}>
             <div
               className="h-6 border-b border-border relative cursor-pointer sticky top-0 z-20"
               style={{ background: 'hsl(var(--editor-panel-header))' }}
@@ -550,28 +550,28 @@ const TimelinePanel = () => {
                 )}
               </div>
             ))}
-          </div>
 
-          {snapLine !== null && (
-            <div
-              className="absolute top-0 bottom-0 w-px bg-yellow-400/60 z-20 pointer-events-none"
-              style={{ left: snapLine * pps }}
-            />
-          )}
+            {snapLine !== null && (
+              <div
+                className="absolute top-0 bottom-0 w-px bg-yellow-400/60 z-20 pointer-events-none"
+                style={{ left: snapLine * pps }}
+              />
+            )}
 
-          <div
-            className="absolute top-0 bottom-0 z-30 pointer-events-none"
-            style={{ left: currentTime * pps }}
-          >
             <div
-              className="w-3 h-3 -ml-1.5 cursor-pointer pointer-events-auto z-40 sticky top-0"
-              onMouseDown={handlePlayheadDrag}
+              className="absolute top-0 bottom-0 z-30 pointer-events-none"
+              style={{ left: currentTime * pps }}
             >
-              <svg viewBox="0 0 12 12" className="w-3 h-3">
-                <polygon points="0,0 12,0 6,10" fill="hsl(var(--editor-playhead))" />
-              </svg>
+              <div
+                className="w-3 h-3 -ml-1.5 cursor-pointer pointer-events-auto z-40 sticky top-0"
+                onMouseDown={handlePlayheadDrag}
+              >
+                <svg viewBox="0 0 12 12" className="w-3 h-3">
+                  <polygon points="0,0 12,0 6,10" fill="hsl(var(--editor-playhead))" />
+                </svg>
+              </div>
+              <div className="w-px h-full mx-auto" style={{ background: 'hsl(var(--editor-playhead))', marginTop: '-1px' }} />
             </div>
-            <div className="w-px h-full mx-auto" style={{ background: 'hsl(var(--editor-playhead))', marginTop: '-1px' }} />
           </div>
         </div>
       </div>
