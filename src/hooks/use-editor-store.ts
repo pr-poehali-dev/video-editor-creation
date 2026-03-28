@@ -14,6 +14,7 @@ interface EditorStore extends EditorState {
   toggleTrackVisibility: (trackId: string) => void;
   setTrackHeight: (trackId: string, height: number) => void;
   reorderTracks: (fromIndex: number, toIndex: number) => void;
+  renameTrack: (trackId: string, name: string) => void;
   addClip: (trackId: string, clip: Partial<TimelineClip>) => void;
   addClipFromAsset: (asset: MediaAsset, trackId: string, startTime: number) => void;
   removeClip: (clipId: string) => void;
@@ -141,6 +142,10 @@ const useEditorStore = create<EditorStore>((set, get) => ({
     newTracks.splice(toIndex, 0, moved);
     return { tracks: newTracks };
   }),
+
+  renameTrack: (trackId, name) => set((state) => ({
+    tracks: state.tracks.map(t => t.id === trackId ? { ...t, name: name.trim() || t.name } : t),
+  })),
 
   addClip: (trackId, clip) => set((state) => ({
     tracks: state.tracks.map(t => t.id === trackId ? {

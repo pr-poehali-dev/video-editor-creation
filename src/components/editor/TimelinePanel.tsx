@@ -50,7 +50,7 @@ const TimelinePanel = () => {
     toggleTrackMute, toggleTrackLock, toggleTrackVisibility,
     addTrack, splitClip, duplicateClip, resizeClip,
     addClipFromAsset, draggingAsset, setDraggingAsset,
-    removeTrack, updateClip, reorderTracks,
+    removeTrack, updateClip, reorderTracks, renameTrack,
   } = useEditorStore();
 
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -66,6 +66,8 @@ const TimelinePanel = () => {
   const [dropTarget, setDropTarget] = useState<{ trackId: string; time: number } | null>(null);
   const [snapLine, setSnapLine] = useState<number | null>(null);
   const [trackDrag, setTrackDrag] = useState<{ fromIdx: number; overIdx: number } | null>(null);
+  const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
+  const [editingTrackName, setEditingTrackName] = useState('');
 
   const pps = PIXELS_PER_SECOND * zoom;
 
@@ -416,7 +418,25 @@ const TimelinePanel = () => {
                     size={9}
                     className={track.type === 'video' ? 'text-blue-400' : track.type === 'audio' ? 'text-green-400' : 'text-purple-400'}
                   />
-                  <span className="text-[10px] font-medium truncate">{track.name}</span>
+                  {editingTrackId === track.id ? (
+                    <input
+                      autoFocus
+                      value={editingTrackName}
+                      onChange={(e) => setEditingTrackName(e.target.value)}
+                      onBlur={() => { renameTrack(track.id, editingTrackName); setEditingTrackId(null); }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { renameTrack(track.id, editingTrackName); setEditingTrackId(null); }
+                        if (e.key === 'Escape') setEditingTrackId(null);
+                      }}
+                      className="text-[10px] font-medium bg-secondary/80 border border-border rounded px-1 py-0 w-full outline-none focus:border-primary"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span
+                      className="text-[10px] font-medium truncate cursor-default"
+                      onDoubleClick={(e) => { e.stopPropagation(); setEditingTrackId(track.id); setEditingTrackName(track.name); }}
+                    >{track.name}</span>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-0.5">
