@@ -466,7 +466,7 @@ const TimelinePanel = () => {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <div style={{ width: totalWidth, minWidth: '100%' }}>
+          <div className="relative" style={{ width: totalWidth, minWidth: '100%' }}>
             <div
               className="h-6 border-b border-border relative cursor-pointer sticky top-0 z-20"
               style={{ background: 'hsl(var(--editor-panel-header))' }}
