@@ -65,6 +65,7 @@ const TimelinePanel = () => {
   } | null>(null);
   const [dropTarget, setDropTarget] = useState<{ trackId: string; time: number } | null>(null);
   const [snapLine, setSnapLine] = useState<number | null>(null);
+  const [trackDrag, setTrackDrag] = useState<{ fromIdx: number; overIdx: number } | null>(null);
 
   const pps = PIXELS_PER_SECOND * zoom;
 
@@ -375,24 +376,38 @@ const TimelinePanel = () => {
           {tracks.map((track, idx) => (
             <div
               key={track.id}
-              className={`flex items-center gap-1 px-1.5 border-b border-border/50 group transition-colors ${track.locked ? 'opacity-50' : ''}`}
+              draggable
+              onDragStart={(e) => {
+                setTrackDrag({ fromIdx: idx, overIdx: idx });
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', String(idx));
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (trackDrag && trackDrag.overIdx !== idx) {
+                  setTrackDrag({ ...trackDrag, overIdx: idx });
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (trackDrag && trackDrag.fromIdx !== idx) {
+                  reorderTracks(trackDrag.fromIdx, idx);
+                }
+                setTrackDrag(null);
+              }}
+              onDragEnd={() => setTrackDrag(null)}
+              className={`flex items-center gap-1 px-1.5 border-b transition-all ${track.locked ? 'opacity-50' : ''} group ${
+                trackDrag?.overIdx === idx && trackDrag.fromIdx !== idx
+                  ? trackDrag.fromIdx > idx
+                    ? 'border-t-2 border-t-primary border-b-border/50'
+                    : 'border-b-2 border-b-primary'
+                  : 'border-b-border/50'
+              } ${trackDrag?.fromIdx === idx ? 'opacity-40' : ''}`}
               style={{ height: track.height, background: 'hsl(var(--editor-panel))' }}
             >
-              <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => idx > 0 && reorderTracks(idx, idx - 1)}
-                  disabled={idx === 0}
-                  className={`p-0 leading-none ${idx === 0 ? 'text-muted-foreground/15 cursor-default' : 'text-muted-foreground/50 hover:text-foreground'}`}
-                >
-                  <Icon name="ChevronUp" size={10} />
-                </button>
-                <button
-                  onClick={() => idx < tracks.length - 1 && reorderTracks(idx, idx + 1)}
-                  disabled={idx === tracks.length - 1}
-                  className={`p-0 leading-none ${idx === tracks.length - 1 ? 'text-muted-foreground/15 cursor-default' : 'text-muted-foreground/50 hover:text-foreground'}`}
-                >
-                  <Icon name="ChevronDown" size={10} />
-                </button>
+              <div className="cursor-grab active:cursor-grabbing text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors">
+                <Icon name="GripVertical" size={10} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
