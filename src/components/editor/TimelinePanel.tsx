@@ -59,6 +59,8 @@ const TimelinePanel = () => {
     type: 'move' | 'resize-left' | 'resize-right';
     clipId: string;
     startX: number;
+    startY: number;
+    offsetYInTrack: number;
     originalStart: number;
     originalDuration: number;
     sourceTrackId: string;
@@ -153,11 +155,28 @@ const TimelinePanel = () => {
     const track = tracks.find(t => t.id === trackId);
     if (track?.locked) return;
 
+    let offsetYInTrack = 0;
+    if (timelineRef.current) {
+      const rect = timelineRef.current.getBoundingClientRect();
+      const scrollTop = timelineRef.current.scrollTop;
+      const mouseRelY = e.clientY - rect.top + scrollTop;
+      let accHeight = 24;
+      for (const t of tracks) {
+        if (t.id === trackId) {
+          offsetYInTrack = mouseRelY - accHeight;
+          break;
+        }
+        accHeight += t.height;
+      }
+    }
+
     selectClip(clipId);
     setDragState({
       type,
       clipId,
       startX: e.clientX,
+      startY: e.clientY,
+      offsetYInTrack,
       originalStart: clip.startTime,
       originalDuration: clip.duration,
       sourceTrackId: trackId,
@@ -176,18 +195,36 @@ const TimelinePanel = () => {
         moveClip(dragState.clipId, newStart);
 
         if (timelineRef.current) {
-          const rect = timelineRef.current.getBoundingClientRect();
-          const relY = e.clientY - rect.top;
-          let accHeight = 24;
-          for (const track of tracks) {
-            if (relY >= accHeight && relY < accHeight + track.height) {
-              if (track.id !== dragState.sourceTrackId && !track.locked) {
-                moveClipToTrack(dragState.clipId, track.id, newStart);
-                setDragState(prev => prev ? { ...prev, sourceTrackId: track.id } : null);
-              }
+          const deltaY = e.clientY - dragState.startY;
+          let sourceTop = 0;
+          let accH = 0;
+          for (const t of tracks) {
+            if (t.id === dragState.sourceTrackId) { sourceTop = accH; break; }
+            accH += t.height;
+          }
+          const anchorInTracks = sourceTop + dragState.offsetYInTrack + deltaY;
+          let targetTrack: typeof tracks[0] | null = null;
+          let tAcc = 0;
+          for (const t of tracks) {
+            if (anchorInTracks >= tAcc && anchorInTracks < tAcc + t.height) {
+              targetTrack = t;
               break;
             }
-            accHeight += track.height;
+            tAcc += t.height;
+          }
+          if (targetTrack && targetTrack.id !== dragState.sourceTrackId && !targetTrack.locked) {
+            moveClipToTrack(dragState.clipId, targetTrack.id, newStart);
+            let newTrackTop = 0;
+            for (const t of tracks) {
+              if (t.id === targetTrack.id) break;
+              newTrackTop += t.height;
+            }
+            setDragState(prev => prev ? {
+              ...prev,
+              sourceTrackId: targetTrack!.id,
+              startY: e.clientY,
+              offsetYInTrack: anchorInTracks - newTrackTop,
+            } : null);
           }
         }
       } else if (dragState.type === 'resize-left') {
