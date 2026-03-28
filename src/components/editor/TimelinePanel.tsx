@@ -50,7 +50,7 @@ const TimelinePanel = () => {
     toggleTrackMute, toggleTrackLock, toggleTrackVisibility,
     addTrack, splitClip, duplicateClip, resizeClip,
     addClipFromAsset, draggingAsset, setDraggingAsset,
-    removeTrack, updateClip,
+    removeTrack, updateClip, reorderTracks,
   } = useEditorStore();
 
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -372,12 +372,28 @@ const TimelinePanel = () => {
           <div className="h-6 border-b border-border flex items-center px-2" style={{ background: 'hsl(var(--editor-panel-header))' }}>
             <span className="text-[8px] text-muted-foreground uppercase tracking-widest">Дорожки</span>
           </div>
-          {tracks.map(track => (
+          {tracks.map((track, idx) => (
             <div
               key={track.id}
-              className={`flex items-center gap-1 px-2 border-b border-border/50 group transition-colors ${track.locked ? 'opacity-50' : ''}`}
+              className={`flex items-center gap-1 px-1.5 border-b border-border/50 group transition-colors ${track.locked ? 'opacity-50' : ''}`}
               style={{ height: track.height, background: 'hsl(var(--editor-panel))' }}
             >
+              <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => idx > 0 && reorderTracks(idx, idx - 1)}
+                  disabled={idx === 0}
+                  className={`p-0 leading-none ${idx === 0 ? 'text-muted-foreground/15 cursor-default' : 'text-muted-foreground/50 hover:text-foreground'}`}
+                >
+                  <Icon name="ChevronUp" size={10} />
+                </button>
+                <button
+                  onClick={() => idx < tracks.length - 1 && reorderTracks(idx, idx + 1)}
+                  disabled={idx === tracks.length - 1}
+                  className={`p-0 leading-none ${idx === tracks.length - 1 ? 'text-muted-foreground/15 cursor-default' : 'text-muted-foreground/50 hover:text-foreground'}`}
+                >
+                  <Icon name="ChevronDown" size={10} />
+                </button>
+              </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1">
                   <Icon
