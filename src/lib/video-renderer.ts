@@ -88,6 +88,7 @@ interface ClipInfo {
   scale: number;
   rotation: number;
   fitMode: 'contain' | 'cover' | 'fill';
+  isBackground: boolean;
 }
 
 export class VideoRenderer {
@@ -745,7 +746,7 @@ export class VideoRenderer {
       const elapsed = currentTime - clip.startTime;
       const remaining = clip.duration - elapsed;
       let fadeAlpha = clip.opacity;
-      const isLongBg = clip.type === "image" && clip.duration >= 10;
+      const isLongBg = clip.isBackground || (clip.type === "image" && clip.duration >= 10);
 
       if (!isLongBg && clip.duration > 0.2 && (clip.type === "image" || clip.type === "video")) {
         const fadeDur = Math.min(FADE_DURATION, clip.duration / 3);
@@ -1155,6 +1156,7 @@ export class VideoRenderer {
           scale: clip.scale ?? 100,
           rotation: clip.rotation ?? 0,
           fitMode: clip.fitMode || ((clip.type || track.type) === 'image' ? 'cover' : 'contain'),
+          isBackground: clip.isBackground || false,
         });
       }
     }

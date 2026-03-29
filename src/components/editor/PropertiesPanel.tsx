@@ -280,6 +280,19 @@ const PropertiesPanel = () => {
                     ))}
                   </div>
                 </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-1.5">
+                    <Icon name="Pin" size={11} className="text-muted-foreground" />
+                    <Label className="text-[10px] text-muted-foreground">Закрепить как фон</Label>
+                  </div>
+                  <button
+                    onClick={() => updateClip(selectedClip.id, { isBackground: !selectedClip.isBackground })}
+                    className={`w-8 h-4 rounded-full transition-colors relative ${selectedClip.isBackground ? 'bg-primary' : 'bg-secondary'}`}
+                  >
+                    <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${selectedClip.isBackground ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
               </div>
             </>
           )}
