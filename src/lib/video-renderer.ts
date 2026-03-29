@@ -1158,6 +1158,9 @@ export class VideoRenderer {
       }
     }
     return result.sort((a, b) => {
+      const aIsText = a.type === 'text' ? 1 : 0;
+      const bIsText = b.type === 'text' ? 1 : 0;
+      if (aIsText !== bIsText) return aIsText - bIsText;
       if (a.trackIndex !== b.trackIndex) return b.trackIndex - a.trackIndex;
       return a.startTime - b.startTime;
     });
