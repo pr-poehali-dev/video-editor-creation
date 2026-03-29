@@ -342,6 +342,20 @@ const PropertiesPanel = () => {
                         className="mt-1"
                       />
                     </div>
+                    <div>
+                      <div className="flex justify-between">
+                        <Label className="text-[10px] text-muted-foreground">Прозрачность</Label>
+                        <span className="text-[10px] text-muted-foreground">{Math.round((selectedClip.bgOpacity ?? 0.8) * 100)}%</span>
+                      </div>
+                      <Slider
+                        value={[Math.round((selectedClip.bgOpacity ?? 0.8) * 100)]}
+                        onValueChange={([v]) => updateClip(selectedClip.id, { bgOpacity: v / 100 })}
+                        min={5}
+                        max={100}
+                        step={5}
+                        className="mt-1"
+                      />
+                    </div>
                   </div>
                 )}
               </div>

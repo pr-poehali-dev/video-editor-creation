@@ -55,6 +55,7 @@ export interface TimelineClip {
   bgAnchor?: 'top-left' | 'top-center' | 'top-right' | 'center-left' | 'center' | 'center-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
   bgScale?: number;
   bgMargin?: number;
+  bgOpacity?: number;
   speedRampPreset?: string;
   filters: ClipFilter[];
   transition?: ClipTransition;

@@ -92,6 +92,7 @@ interface ClipInfo {
   bgAnchor: string;
   bgScale: number;
   bgMargin: number;
+  bgOpacity: number;
 }
 
 export class VideoRenderer {
@@ -748,7 +749,7 @@ export class VideoRenderer {
 
       const elapsed = currentTime - clip.startTime;
       const remaining = clip.duration - elapsed;
-      let fadeAlpha = clip.opacity;
+      let fadeAlpha = clip.isBackground ? clip.bgOpacity : clip.opacity;
       const isLongBg = clip.isBackground || (clip.type === "image" && clip.duration >= 10);
 
       if (!isLongBg && clip.duration > 0.2 && (clip.type === "image" || clip.type === "video")) {
@@ -1163,6 +1164,7 @@ export class VideoRenderer {
           bgAnchor: clip.bgAnchor || 'bottom-right',
           bgScale: clip.bgScale ?? 20,
           bgMargin: clip.bgMargin ?? 5,
+          bgOpacity: clip.bgOpacity ?? 0.8,
         });
       }
     }

@@ -68,6 +68,7 @@ interface ActiveClip {
   bgAnchor: string;
   bgScale: number;
   bgMargin: number;
+  bgOpacity: number;
 }
 
 const getFilterStyle = (filters: ActiveClip['filters'], previewFilter?: string | null): string => {
@@ -245,6 +246,7 @@ const PreviewPanel = () => {
             bgAnchor: clip.bgAnchor || 'bottom-right',
             bgScale: clip.bgScale ?? 20,
             bgMargin: clip.bgMargin ?? 5,
+            bgOpacity: clip.bgOpacity ?? 0.8,
           });
         }
       }
@@ -562,13 +564,14 @@ const PreviewPanel = () => {
         const combinedFilter = [baseFilter !== 'none' ? baseFilter : '', clip.transitionFilter].filter(Boolean).join(' ') || undefined;
         const isSelected = selectedClipId === clip.id;
         const emblemPos = getEmblemStyle(clip);
+        const emblemOpacity = clip.bgOpacity * (clip.fadeOpacity / clip.opacity || 1);
         return (
           <div
             key={clip.id}
             className="absolute"
             style={{
               ...emblemPos,
-              opacity: clip.fadeOpacity,
+              opacity: emblemOpacity,
               zIndex: layerZ,
               filter: combinedFilter,
             }}
@@ -662,13 +665,14 @@ const PreviewPanel = () => {
         const combinedFilter = [baseFilter !== 'none' ? baseFilter : '', clip.transitionFilter].filter(Boolean).join(' ') || undefined;
         const isSelected = selectedClipId === clip.id;
         const emblemPos = getEmblemStyle(clip);
+        const emblemOpacity = clip.bgOpacity * (clip.fadeOpacity / clip.opacity || 1);
         return (
           <div
             key={clip.id}
             className="absolute"
             style={{
               ...emblemPos,
-              opacity: clip.fadeOpacity,
+              opacity: emblemOpacity,
               zIndex: layerZ,
               filter: combinedFilter,
             }}
