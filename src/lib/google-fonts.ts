@@ -28,6 +28,8 @@ const FONTS = [
 
 const loadedFonts = new Set<string>();
 
+const fontLoadPromises = new Map<string, Promise<void>>();
+
 export function loadGoogleFont(family: string): void {
   const font = FONTS.find(f => f.family === family);
   if (!font || !font.google || loadedFonts.has(family)) return;
@@ -36,7 +38,17 @@ export function loadGoogleFont(family: string): void {
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}:wght@400;600;700;800&display=swap`;
+  const promise = new Promise<void>((resolve) => {
+    link.onload = () => resolve();
+    link.onerror = () => resolve();
+    setTimeout(resolve, 5000);
+  });
+  fontLoadPromises.set(family, promise);
   document.head.appendChild(link);
+}
+
+export function waitForFontStylesheet(family: string): Promise<void> {
+  return fontLoadPromises.get(family) || Promise.resolve();
 }
 
 export function getFontList() {

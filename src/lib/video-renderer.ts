@@ -4,7 +4,7 @@ import type {
   ExportSettings,
 } from "@/types/editor";
 import { media as mediaApi } from "@/lib/api";
-import { ensureFontLoaded } from "@/lib/google-fonts";
+import { ensureFontLoaded, waitForFontStylesheet } from "@/lib/google-fonts";
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 
@@ -141,12 +141,30 @@ export class VideoRenderer {
 
     const clips = this.collectAllClips(tracks);
 
+    const fontFamilies = new Set<string>();
     for (const c of clips) {
       if (c.type === "text" && c.fontFamily) {
         ensureFontLoaded(c.fontFamily);
+        fontFamilies.add(c.fontFamily);
       }
     }
-    await new Promise(r => setTimeout(r, 300));
+
+    if (fontFamilies.size > 0) {
+      const stylesheetWaits = Array.from(fontFamilies).map(f => waitForFontStylesheet(f));
+      await Promise.all(stylesheetWaits);
+      if (document.fonts) {
+        const fontChecks = Array.from(fontFamilies).flatMap(family => [
+          document.fonts.load(`400 48px "${family}"`).catch(() => {}),
+          document.fonts.load(`600 48px "${family}"`).catch(() => {}),
+          document.fonts.load(`700 48px "${family}"`).catch(() => {}),
+          document.fonts.load(`800 48px "${family}"`).catch(() => {}),
+        ]);
+        await Promise.all(fontChecks);
+        await document.fonts.ready;
+      } else {
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
 
     const imageCache = new Map<string, HTMLImageElement>();
 
@@ -1403,6 +1421,8 @@ export class VideoRenderer {
   }
 
   private wrapTextLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+    const tolerance = maxWidth * 0.02;
+    const effectiveMax = maxWidth + tolerance;
     const hardLines = text.split('\n');
     const result: string[] = [];
     for (const hardLine of hardLines) {
@@ -1411,7 +1431,7 @@ export class VideoRenderer {
       let current = '';
       for (const word of words) {
         const test = current + word;
-        if (ctx.measureText(test).width > maxWidth && current.length > 0) {
+        if (ctx.measureText(test).width > effectiveMax && current.length > 0) {
           result.push(current);
           current = word.trimStart();
         } else {
@@ -1555,14 +1575,17 @@ export class VideoRenderer {
     else drawY = (canvasH - drawH) / 2;
 
     if (clip.bgRotation) {
+      this.ctx.save();
       const cx = drawX + drawW / 2;
       const cy = drawY + drawH / 2;
       this.ctx.translate(cx, cy);
       this.ctx.rotate((clip.bgRotation * Math.PI) / 180);
       this.ctx.translate(-cx, -cy);
+      this.ctx.drawImage(img, drawX, drawY, drawW, drawH);
+      this.ctx.restore();
+    } else {
+      this.ctx.drawImage(img, drawX, drawY, drawW, drawH);
     }
-
-    this.ctx.drawImage(img, drawX, drawY, drawW, drawH);
   }
 
   private applyCanvasFilters(filters: ClipFilter[], _w: number, _h: number) {
