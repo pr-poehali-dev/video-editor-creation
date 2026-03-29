@@ -693,9 +693,13 @@ const PreviewPanel = () => {
       <div className="flex-1 flex items-center justify-center p-2 min-h-0">
         <div
           ref={canvasRef}
-          className="relative w-full rounded overflow-hidden"
-          style={{ aspectRatio: '16/9', maxHeight: '100%', background: '#0a0a0f' }}
+          className="relative rounded overflow-hidden"
+          style={{ aspectRatio: `${project.width}/${project.height}`, maxHeight: '100%', maxWidth: '100%', width: project.width >= project.height ? '100%' : 'auto', height: project.width < project.height ? '100%' : 'auto', background: '#0a0a0f' }}
         >
+          <div className="absolute inset-0 pointer-events-none z-[200]" style={{ border: '1.5px solid rgba(255,255,255,0.15)', borderRadius: 'inherit' }} />
+          <div className="absolute pointer-events-none z-[200]" style={{ inset: '5%', border: '1px dashed rgba(255,255,255,0.08)', borderRadius: 2 }}>
+            <span className="absolute top-0 left-1 text-[7px] text-white/15 leading-none" style={{ transform: 'translateY(-100%)' }}>safe</span>
+          </div>
           {hasVisual ? (
             <div className="absolute inset-0">
               {videoClips.map((clip, i) => renderMediaClip(clip, i))}
