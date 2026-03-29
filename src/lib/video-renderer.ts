@@ -79,6 +79,10 @@ interface ClipInfo {
   textAnimationPerLine?: boolean;
   textAnimationDuration?: number;
   textAnimationDelay?: number;
+  subtitleWords?: { word: string; start: number; end: number }[];
+  subtitleMode?: 'highlight' | 'reveal';
+  subtitleBaseColor?: string;
+  subtitleActiveColor?: string;
   trackMuted: boolean;
   trackIndex: number;
   filters: ClipFilter[];
@@ -102,9 +106,11 @@ export class VideoRenderer {
   private cancelled = false;
   private assetDetails: AssetLoadDetail[] = [];
   private onAssetDetail?: AssetDetailCallback;
+  private wrapCache = new Map<string, string[]>();
 
   async init(): Promise<void> {
     this.cancelled = false;
+    this.wrapCache.clear();
   }
 
   async render(
@@ -920,17 +926,63 @@ export class VideoRenderer {
             ctx.shadowBlur = 0;
           }
 
-          ctx.fillStyle = clip.fontColor || "#ffffff";
-          if (clipPathFraction < 1) {
-            ctx.save();
-            const clipW = lineW * clipPathFraction;
-            ctx.beginPath();
-            ctx.rect(drawX, drawY - fontSize, clipW, fontSize * 2.5);
-            ctx.clip();
-            ctx.fillText(lines[li], drawX, drawY);
-            ctx.restore();
+          const hasSubWords = clip.subtitleWords && clip.subtitleWords.length > 0;
+          if (hasSubWords) {
+            const subMode = clip.subtitleMode || 'highlight';
+            const baseColor = clip.subtitleBaseColor || clip.fontColor || '#ffffff';
+            const activeColor = clip.subtitleActiveColor || '#FFD700';
+            const spaceW = fontSize * 0.2;
+
+            let globalWordIdx = 0;
+            for (let prev = 0; prev < li; prev++) {
+              const prevWords = lines[prev].split(/\s+/).filter(w => w.length > 0);
+              globalWordIdx += prevWords.length;
+            }
+
+            const lineWords = lines[li].split(/\s+/).filter(w => w.length > 0);
+            let wordX = drawX;
+
+            for (let wi = 0; wi < lineWords.length; wi++) {
+              const word = lineWords[wi];
+              const swIdx = globalWordIdx + wi;
+              const sw = swIdx < clip.subtitleWords!.length ? clip.subtitleWords![swIdx] : undefined;
+
+              let wordColor = baseColor;
+              let wordOpacityMul = 1;
+              if (sw) {
+                const isActive = elapsed >= sw.start && elapsed < sw.end;
+                const isPast = elapsed >= sw.end;
+                const isFuture = elapsed < sw.start;
+                if (subMode === 'reveal' && isFuture) {
+                  wordOpacityMul = 0;
+                } else if (subMode === 'reveal' && isActive) {
+                  const wp = Math.min(1, (elapsed - sw.start) / Math.max(0.05, sw.end - sw.start));
+                  wordOpacityMul = 0.5 + wp * 0.5;
+                  wordColor = activeColor;
+                } else if (isActive || isPast) {
+                  wordColor = activeColor;
+                }
+              }
+              const prevAlpha = ctx.globalAlpha;
+              ctx.globalAlpha = lineOpacity * wordOpacityMul;
+              ctx.fillStyle = wordColor;
+              ctx.fillText(word, wordX, drawY);
+              ctx.globalAlpha = prevAlpha;
+              wordX += ctx.measureText(word).width + spaceW;
+            }
           } else {
-            ctx.fillText(lines[li], drawX, drawY);
+            ctx.fillStyle = clip.fontColor || "#ffffff";
+            if (clipPathFraction < 1) {
+              ctx.save();
+              const clipW = lineW * clipPathFraction;
+              ctx.beginPath();
+              ctx.rect(drawX, drawY - fontSize, clipW, fontSize * 2.5);
+              ctx.clip();
+              ctx.fillText(lines[li], drawX, drawY);
+              ctx.restore();
+            } else {
+              ctx.fillText(lines[li], drawX, drawY);
+            }
           }
           ctx.restore();
         }
@@ -1170,6 +1222,10 @@ export class VideoRenderer {
           textAnimationPerLine: clip.textAnimationPerLine,
           textAnimationDuration: clip.textAnimationDuration,
           textAnimationDelay: clip.textAnimationDelay,
+          subtitleWords: clip.subtitleWords,
+          subtitleMode: clip.subtitleMode,
+          subtitleBaseColor: clip.subtitleBaseColor,
+          subtitleActiveColor: clip.subtitleActiveColor,
           trackMuted: track.muted,
           trackIndex: tIdx,
           filters: (clip.filters || []).map(f => ({ name: f.name, params: f.params })),
@@ -1428,25 +1484,23 @@ export class VideoRenderer {
     maxWidth: number,
     hasTextWidth: boolean,
   ): string[] {
+    const cacheKey = `${text}|${fontFamily}|${fontSize}|${fontWeight}|${maxWidth}|${hasTextWidth}`;
+    const cached = this.wrapCache.get(cacheKey);
+    if (cached) return cached;
+
     const container = document.createElement('div');
-    container.style.position = 'absolute';
-    container.style.visibility = 'hidden';
-    container.style.left = '-9999px';
-    container.style.top = '-9999px';
-    if (hasTextWidth) {
-      container.style.width = `${maxWidth}px`;
-    } else {
-      container.style.maxWidth = `${maxWidth}px`;
-    }
-    container.style.fontFamily = fontFamily;
-    container.style.fontSize = `${fontSize}px`;
-    container.style.fontWeight = String(fontWeight);
-    container.style.lineHeight = '1.3';
-    container.style.whiteSpace = 'pre-wrap';
-    container.style.wordBreak = hasTextWidth ? 'break-word' : 'normal';
-    container.style.letterSpacing = 'normal';
+    container.style.cssText = `
+      position:absolute;visibility:hidden;left:-9999px;top:-9999px;
+      ${hasTextWidth ? `width:${maxWidth}px` : `max-width:${maxWidth}px`};
+      font-family:${fontFamily};font-size:${fontSize}px;font-weight:${fontWeight};
+      line-height:1.3;white-space:pre-wrap;
+      word-break:${hasTextWidth ? 'break-word' : 'normal'};
+      letter-spacing:normal;margin:0;padding:0;border:0;
+      box-sizing:content-box;text-rendering:auto;
+    `;
 
     const span = document.createElement('span');
+    span.style.cssText = 'margin:0;padding:0;border:0;';
     span.textContent = text;
     container.appendChild(span);
     document.body.appendChild(container);
@@ -1480,7 +1534,9 @@ export class VideoRenderer {
     }
 
     document.body.removeChild(container);
-    return lines.length > 0 ? lines : [''];
+    const result = lines.length > 0 ? lines : [''];
+    this.wrapCache.set(cacheKey, result);
+    return result;
   }
 
   private resolveAssetUrl(assetId: string, originalUrl: string): string {
