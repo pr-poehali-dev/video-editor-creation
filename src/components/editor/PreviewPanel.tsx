@@ -64,6 +64,7 @@ interface ActiveClip {
   scale: number;
   rotation: number;
   fitMode: 'contain' | 'cover' | 'fill';
+  isBackground?: boolean;
 }
 
 const getFilterStyle = (filters: ActiveClip['filters'], previewFilter?: string | null): string => {
@@ -237,6 +238,7 @@ const PreviewPanel = () => {
             scale: clip.scale ?? 100,
             rotation: clip.rotation ?? 0,
             fitMode: clip.fitMode || (clip.type === 'image' ? 'cover' : 'contain'),
+            isBackground: clip.isBackground,
           });
         }
       }
@@ -391,7 +393,7 @@ const PreviewPanel = () => {
   const frameBack = () => setCurrentTime(Math.max(0, currentTime - 1 / project.fps));
   const frameForward = () => setCurrentTime(Math.min(maxTime, currentTime + 1 / project.fps));
 
-  const videoClips = activeClips.filter(c => c.type === 'video' || c.type === 'image');
+  const videoClips = activeClips.filter(c => c.type === 'video' || c.type === 'image').sort((a, b) => (a.isBackground ? 1 : 0) - (b.isBackground ? 1 : 0));
   const textClips = activeClips.filter(c => c.type === 'text');
   const audioClips = activeClips.filter(c => c.type === 'audio' && !c.trackMuted);
   const hasVisual = videoClips.length > 0 || textClips.length > 0;
@@ -520,7 +522,7 @@ const PreviewPanel = () => {
   const renderMediaClip = (clip: ActiveClip, _i: number) => {
     const hasUrl = !!clip.assetUrl;
     const hasChromaKey = clip.filters?.some(f => f.type === 'chromaKey');
-    const layerZ = totalTracks - clip.trackIndex;
+    const layerZ = clip.isBackground ? 50 + totalTracks : totalTracks - clip.trackIndex;
 
     if (clip.type === 'image' && hasUrl) {
       if (loadErrors.has(clip.id)) {

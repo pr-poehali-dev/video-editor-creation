@@ -1161,9 +1161,13 @@ export class VideoRenderer {
       }
     }
     return result.sort((a, b) => {
-      const aIsText = a.type === 'text' ? 1 : 0;
-      const bIsText = b.type === 'text' ? 1 : 0;
-      if (aIsText !== bIsText) return aIsText - bIsText;
+      const aIsText = a.type === 'text' ? 2 : 0;
+      const bIsText = b.type === 'text' ? 2 : 0;
+      const aBg = a.isBackground && aIsText === 0 ? 1 : 0;
+      const bBg = b.isBackground && bIsText === 0 ? 1 : 0;
+      const aLayer = aIsText + aBg;
+      const bLayer = bIsText + bBg;
+      if (aLayer !== bLayer) return aLayer - bLayer;
       if (a.trackIndex !== b.trackIndex) return b.trackIndex - a.trackIndex;
       return a.startTime - b.startTime;
     });
