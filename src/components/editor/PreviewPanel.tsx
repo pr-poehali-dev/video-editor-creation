@@ -69,6 +69,7 @@ interface ActiveClip {
   bgScale: number;
   bgMargin: number;
   bgOpacity: number;
+  bgRotation: number;
 }
 
 const getFilterStyle = (filters: ActiveClip['filters'], previewFilter?: string | null): string => {
@@ -247,6 +248,7 @@ const PreviewPanel = () => {
             bgScale: clip.bgScale ?? 20,
             bgMargin: clip.bgMargin ?? 5,
             bgOpacity: clip.bgOpacity ?? 0.8,
+            bgRotation: clip.bgRotation ?? 0,
           });
         }
       }
@@ -539,6 +541,9 @@ const PreviewPanel = () => {
     if (hPos === 'left') style.left = margin;
     else if (hPos === 'right') style.right = margin;
     else { style.left = '50%'; style.transform = (style.transform || '') + ' translateX(-50%)'; }
+    if (clip.bgRotation) {
+      style.transform = (style.transform || '') + ` rotate(${clip.bgRotation}deg)`;
+    }
     return style;
   };
 

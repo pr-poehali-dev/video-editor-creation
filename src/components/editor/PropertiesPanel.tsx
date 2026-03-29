@@ -356,6 +356,20 @@ const PropertiesPanel = () => {
                         className="mt-1"
                       />
                     </div>
+                    <div>
+                      <div className="flex justify-between">
+                        <Label className="text-[10px] text-muted-foreground">Поворот</Label>
+                        <span className="text-[10px] text-muted-foreground">{selectedClip.bgRotation ?? 0}°</span>
+                      </div>
+                      <Slider
+                        value={[selectedClip.bgRotation ?? 0]}
+                        onValueChange={([v]) => updateClip(selectedClip.id, { bgRotation: v })}
+                        min={-180}
+                        max={180}
+                        step={5}
+                        className="mt-1"
+                      />
+                    </div>
                   </div>
                 )}
               </div>

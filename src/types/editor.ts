@@ -56,6 +56,7 @@ export interface TimelineClip {
   bgScale?: number;
   bgMargin?: number;
   bgOpacity?: number;
+  bgRotation?: number;
   speedRampPreset?: string;
   filters: ClipFilter[];
   transition?: ClipTransition;

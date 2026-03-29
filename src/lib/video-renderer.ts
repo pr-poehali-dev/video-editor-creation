@@ -93,6 +93,7 @@ interface ClipInfo {
   bgScale: number;
   bgMargin: number;
   bgOpacity: number;
+  bgRotation: number;
 }
 
 export class VideoRenderer {
@@ -1165,6 +1166,7 @@ export class VideoRenderer {
           bgScale: clip.bgScale ?? 20,
           bgMargin: clip.bgMargin ?? 5,
           bgOpacity: clip.bgOpacity ?? 0.8,
+          bgRotation: clip.bgRotation ?? 0,
         });
       }
     }
@@ -1551,6 +1553,14 @@ export class VideoRenderer {
     if (vPos === 'top') drawY = my;
     else if (vPos === 'bottom') drawY = canvasH - drawH - my;
     else drawY = (canvasH - drawH) / 2;
+
+    if (clip.bgRotation) {
+      const cx = drawX + drawW / 2;
+      const cy = drawY + drawH / 2;
+      this.ctx.translate(cx, cy);
+      this.ctx.rotate((clip.bgRotation * Math.PI) / 180);
+      this.ctx.translate(-cx, -cy);
+    }
 
     this.ctx.drawImage(img, drawX, drawY, drawW, drawH);
   }
