@@ -89,6 +89,9 @@ interface ClipInfo {
   rotation: number;
   fitMode: 'contain' | 'cover' | 'fill';
   isBackground: boolean;
+  bgAnchor: string;
+  bgScale: number;
+  bgMargin: number;
 }
 
 export class VideoRenderer {
@@ -1157,6 +1160,9 @@ export class VideoRenderer {
           rotation: clip.rotation ?? 0,
           fitMode: clip.fitMode || ((clip.type || track.type) === 'image' ? 'cover' : 'contain'),
           isBackground: clip.isBackground || false,
+          bgAnchor: clip.bgAnchor || 'bottom-right',
+          bgScale: clip.bgScale ?? 20,
+          bgMargin: clip.bgMargin ?? 5,
         });
       }
     }
@@ -1455,6 +1461,12 @@ export class VideoRenderer {
     clip: ClipInfo,
   ) {
     if (!this.ctx) return;
+
+    if (clip.isBackground) {
+      this.drawEmblem(img, canvasW, canvasH, clip);
+      return;
+    }
+
     const imgRatio = img.naturalWidth / img.naturalHeight;
     const canvasRatio = canvasW / canvasH;
     let drawW: number, drawH: number, drawX: number, drawY: number;
@@ -1498,6 +1510,45 @@ export class VideoRenderer {
       this.ctx.scale(s, s);
       this.ctx.translate(-canvasW / 2, -canvasH / 2);
     }
+
+    this.ctx.drawImage(img, drawX, drawY, drawW, drawH);
+  }
+
+  private drawEmblem(
+    img: HTMLImageElement,
+    canvasW: number,
+    canvasH: number,
+    clip: ClipInfo,
+  ) {
+    if (!this.ctx) return;
+    const anchor = clip.bgAnchor || 'bottom-right';
+    const scalePct = clip.bgScale / 100;
+    const marginPct = clip.bgMargin / 100;
+    const imgRatio = img.naturalWidth / img.naturalHeight;
+
+    const boxW = canvasW * scalePct;
+    const boxH = canvasH * scalePct;
+    let drawW: number, drawH: number;
+    if (imgRatio > boxW / boxH) {
+      drawW = boxW;
+      drawH = boxW / imgRatio;
+    } else {
+      drawH = boxH;
+      drawW = boxH * imgRatio;
+    }
+
+    const mx = canvasW * marginPct;
+    const my = canvasH * marginPct;
+    const [vPos, hPos] = anchor === 'center' ? ['center', 'center'] : anchor.split('-');
+    let drawX: number, drawY: number;
+
+    if (hPos === 'left') drawX = mx;
+    else if (hPos === 'right') drawX = canvasW - drawW - mx;
+    else drawX = (canvasW - drawW) / 2;
+
+    if (vPos === 'top') drawY = my;
+    else if (vPos === 'bottom') drawY = canvasH - drawH - my;
+    else drawY = (canvasH - drawH) / 2;
 
     this.ctx.drawImage(img, drawX, drawY, drawW, drawH);
   }

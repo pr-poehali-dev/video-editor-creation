@@ -52,6 +52,9 @@ export interface TimelineClip {
   rotation?: number;
   fitMode?: 'contain' | 'cover' | 'fill';
   isBackground?: boolean;
+  bgAnchor?: 'top-left' | 'top-center' | 'top-right' | 'center-left' | 'center' | 'center-right' | 'bottom-left' | 'bottom-center' | 'bottom-right';
+  bgScale?: number;
+  bgMargin?: number;
   speedRampPreset?: string;
   filters: ClipFilter[];
   transition?: ClipTransition;

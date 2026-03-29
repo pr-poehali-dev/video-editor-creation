@@ -283,8 +283,8 @@ const PropertiesPanel = () => {
 
                 <div className="flex items-center justify-between pt-1">
                   <div className="flex items-center gap-1.5">
-                    <Icon name="Pin" size={11} className="text-muted-foreground" />
-                    <Label className="text-[10px] text-muted-foreground">Закрепить как фон</Label>
+                    <Icon name="Stamp" size={11} className="text-muted-foreground" />
+                    <Label className="text-[10px] text-muted-foreground">Эмблема (водяной знак)</Label>
                   </div>
                   <button
                     onClick={() => updateClip(selectedClip.id, { isBackground: !selectedClip.isBackground })}
@@ -293,6 +293,57 @@ const PropertiesPanel = () => {
                     <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${selectedClip.isBackground ? 'translate-x-4' : 'translate-x-0.5'}`} />
                   </button>
                 </div>
+
+                {selectedClip.isBackground && (
+                  <div className="space-y-2 pt-1 pl-1 border-l-2 border-primary/30 ml-1">
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground mb-1.5 block">Позиция</Label>
+                      <div className="grid grid-cols-3 gap-1 w-[90px]">
+                        {(['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right'] as const).map(anchor => {
+                          const current = selectedClip.bgAnchor || 'bottom-right';
+                          const isActive = current === anchor;
+                          return (
+                            <button
+                              key={anchor}
+                              onClick={() => updateClip(selectedClip.id, { bgAnchor: anchor })}
+                              className={`w-7 h-5 rounded-sm border transition-colors ${isActive ? 'bg-primary border-primary' : 'bg-secondary/50 border-border hover:border-primary/50'}`}
+                            >
+                              <span className={`block w-1.5 h-1.5 rounded-full mx-auto ${isActive ? 'bg-white' : 'bg-muted-foreground/40'}`} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between">
+                        <Label className="text-[10px] text-muted-foreground">Размер</Label>
+                        <span className="text-[10px] text-muted-foreground">{selectedClip.bgScale ?? 20}%</span>
+                      </div>
+                      <Slider
+                        value={[selectedClip.bgScale ?? 20]}
+                        onValueChange={([v]) => updateClip(selectedClip.id, { bgScale: v })}
+                        min={5}
+                        max={100}
+                        step={1}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between">
+                        <Label className="text-[10px] text-muted-foreground">Отступ</Label>
+                        <span className="text-[10px] text-muted-foreground">{selectedClip.bgMargin ?? 5}%</span>
+                      </div>
+                      <Slider
+                        value={[selectedClip.bgMargin ?? 5]}
+                        onValueChange={([v]) => updateClip(selectedClip.id, { bgMargin: v })}
+                        min={0}
+                        max={20}
+                        step={1}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}

@@ -550,7 +550,7 @@ const TimelinePanel = () => {
                       <div className="flex items-center gap-1 px-1.5 h-full overflow-hidden pointer-events-none">
                         <Icon name={clipTypeIcon(clip.type)} size={10} className="flex-shrink-0 opacity-70" />
                         {clip.isBackground && (
-                          <span className="text-[8px] font-bold uppercase px-1 py-px rounded bg-white/20 text-white/90 flex-shrink-0">{"\u0424\u043E\u043D"}</span>
+                          <span className="text-[8px] font-bold uppercase px-1 py-px rounded bg-amber-500/40 text-white/90 flex-shrink-0">Эмблема</span>
                         )}
                         {clipWidth > 50 && (
                           <span className="text-[9px] font-medium truncate text-white/90 drop-shadow-sm">{clip.name}</span>

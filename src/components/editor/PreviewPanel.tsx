@@ -65,6 +65,9 @@ interface ActiveClip {
   rotation: number;
   fitMode: 'contain' | 'cover' | 'fill';
   isBackground?: boolean;
+  bgAnchor: string;
+  bgScale: number;
+  bgMargin: number;
 }
 
 const getFilterStyle = (filters: ActiveClip['filters'], previewFilter?: string | null): string => {
@@ -239,6 +242,9 @@ const PreviewPanel = () => {
             rotation: clip.rotation ?? 0,
             fitMode: clip.fitMode || (clip.type === 'image' ? 'cover' : 'contain'),
             isBackground: clip.isBackground,
+            bgAnchor: clip.bgAnchor || 'bottom-right',
+            bgScale: clip.bgScale ?? 20,
+            bgMargin: clip.bgMargin ?? 5,
           });
         }
       }
@@ -519,6 +525,21 @@ const PreviewPanel = () => {
 
   const totalTracks = tracks.length;
 
+  const getEmblemStyle = (clip: ActiveClip): React.CSSProperties => {
+    const anchor = clip.bgAnchor || 'bottom-right';
+    const size = `${clip.bgScale ?? 20}%`;
+    const margin = `${clip.bgMargin ?? 5}%`;
+    const style: React.CSSProperties = { width: size, height: size };
+    const [vPos, hPos] = anchor === 'center' ? ['center', 'center'] : anchor.split('-');
+    if (vPos === 'top') style.top = margin;
+    else if (vPos === 'bottom') style.bottom = margin;
+    else { style.top = '50%'; style.transform = 'translateY(-50%)'; }
+    if (hPos === 'left') style.left = margin;
+    else if (hPos === 'right') style.right = margin;
+    else { style.left = '50%'; style.transform = (style.transform || '') + ' translateX(-50%)'; }
+    return style;
+  };
+
   const renderMediaClip = (clip: ActiveClip, _i: number) => {
     const hasUrl = !!clip.assetUrl;
     const hasChromaKey = clip.filters?.some(f => f.type === 'chromaKey');
@@ -534,6 +555,43 @@ const PreviewPanel = () => {
           </div>
         );
       }
+
+      if (clip.isBackground) {
+        const clipPreview = selectedClipId === clip.id ? previewFilter : null;
+        const baseFilter = getFilterStyle(clip.filters, clipPreview);
+        const combinedFilter = [baseFilter !== 'none' ? baseFilter : '', clip.transitionFilter].filter(Boolean).join(' ') || undefined;
+        const isSelected = selectedClipId === clip.id;
+        const emblemPos = getEmblemStyle(clip);
+        return (
+          <div
+            key={clip.id}
+            className="absolute"
+            style={{
+              ...emblemPos,
+              opacity: clip.fadeOpacity,
+              zIndex: layerZ,
+              filter: combinedFilter,
+            }}
+          >
+            <img
+              src={clip.assetUrl}
+              alt={clip.name}
+              className="w-full h-full object-contain"
+              draggable={false}
+              onError={() => setLoadErrors(prev => new Set(prev).add(clip.id))}
+            />
+            <div
+              className="absolute inset-0 cursor-move"
+              style={{
+                outline: isSelected ? '2px solid hsl(var(--primary))' : 'none',
+                outlineOffset: '-2px',
+              }}
+              onMouseDown={(e) => handleDragStart(clip.id, e)}
+            />
+          </div>
+        );
+      }
+
       const clipPreview = selectedClipId === clip.id ? previewFilter : null;
       const isBottomLayer = clip.trackIndex === totalTracks - 1;
       const hasCustomTransform = clip.positionX !== 50 || clip.positionY !== 50 || clip.scale !== 100 || clip.rotation !== 0;
@@ -587,6 +645,7 @@ const PreviewPanel = () => {
     }
 
     if (clip.type === 'video' && hasUrl) {
+      const isBottomLayer = clip.trackIndex === totalTracks - 1;
       if (loadErrors.has(clip.id)) {
         return (
           <div key={clip.id} className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: layerZ, background: isBottomLayer ? '#0a0a0f' : 'transparent' }}>
@@ -596,8 +655,48 @@ const PreviewPanel = () => {
           </div>
         );
       }
+
+      if (clip.isBackground) {
+        const clipPreview = selectedClipId === clip.id ? previewFilter : null;
+        const baseFilter = getFilterStyle(clip.filters, clipPreview);
+        const combinedFilter = [baseFilter !== 'none' ? baseFilter : '', clip.transitionFilter].filter(Boolean).join(' ') || undefined;
+        const isSelected = selectedClipId === clip.id;
+        const emblemPos = getEmblemStyle(clip);
+        return (
+          <div
+            key={clip.id}
+            className="absolute"
+            style={{
+              ...emblemPos,
+              opacity: clip.fadeOpacity,
+              zIndex: layerZ,
+              filter: combinedFilter,
+            }}
+          >
+            <video
+              ref={(el) => {
+                if (el) { videoRefs.current.set(clip.id, el); el.muted = clip.trackMuted || !soundUnlocked; }
+                else { videoRefs.current.delete(clip.id); }
+              }}
+              src={clip.assetUrl}
+              className="w-full h-full object-contain"
+              playsInline
+              draggable={false}
+              onError={() => setLoadErrors(prev => new Set(prev).add(clip.id))}
+            />
+            <div
+              className="absolute inset-0 cursor-move"
+              style={{
+                outline: isSelected ? '2px solid hsl(var(--primary))' : 'none',
+                outlineOffset: '-2px',
+              }}
+              onMouseDown={(e) => handleDragStart(clip.id, e)}
+            />
+          </div>
+        );
+      }
+
       const clipPreview = selectedClipId === clip.id ? previewFilter : null;
-      const isBottomLayer = clip.trackIndex === totalTracks - 1;
       const hasCustomTransform = clip.positionX !== 50 || clip.positionY !== 50 || clip.scale !== 100 || clip.rotation !== 0;
       const clipTransform = hasCustomTransform
         ? `translate(${clip.positionX - 50}%, ${clip.positionY - 50}%) scale(${clip.scale / 100}) rotate(${clip.rotation}deg)`
