@@ -54,6 +54,7 @@ interface ActiveClip {
   trackVisible: boolean;
   duration: number;
   trackMuted: boolean;
+  trackIndex: number;
   filters: Array<{ name: string; type: string; params: Record<string, number | string | boolean> }>;
   fadeOpacity: number;
   transitionStyle: string;
@@ -148,7 +149,8 @@ const PreviewPanel = () => {
 
   const activeClips = useMemo(() => {
     const clips: ActiveClip[] = [];
-    for (const track of tracks) {
+    for (let tIdx = 0; tIdx < tracks.length; tIdx++) {
+      const track = tracks[tIdx];
       if (!track.visible) continue;
       for (const clip of track.clips) {
         if (currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration) {
@@ -224,6 +226,7 @@ const PreviewPanel = () => {
             trackType: track.type,
             trackVisible: track.visible,
             trackMuted: track.muted,
+            trackIndex: tIdx,
             filters: clip.filters || [],
             fadeOpacity,
             transitionStyle,
@@ -507,14 +510,17 @@ const PreviewPanel = () => {
     window.addEventListener('mouseup', onUp);
   }, [activeClips, selectClip, updateClip]);
 
-  const renderMediaClip = (clip: ActiveClip, i: number) => {
+  const totalTracks = tracks.length;
+
+  const renderMediaClip = (clip: ActiveClip, _i: number) => {
     const hasUrl = !!clip.assetUrl;
     const hasChromaKey = clip.filters?.some(f => f.type === 'chromaKey');
+    const layerZ = totalTracks - clip.trackIndex;
 
     if (clip.type === 'image' && hasUrl) {
       if (loadErrors.has(clip.id)) {
         return (
-          <div key={clip.id} className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: i, background: '#0a0a0f' }}>
+          <div key={clip.id} className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: layerZ, background: '#0a0a0f' }}>
             <Icon name="ImageOff" size={28} className="text-red-400 mb-2" />
             <span className="text-[11px] text-red-400 font-medium">Не удалось загрузить</span>
             <span className="text-[9px] text-muted-foreground mt-0.5">{clip.name}</span>
@@ -522,7 +528,7 @@ const PreviewPanel = () => {
         );
       }
       const clipPreview = selectedClipId === clip.id ? previewFilter : null;
-      const isBottomLayer = i === 0;
+      const isBottomLayer = clip.trackIndex === totalTracks - 1;
       const hasCustomTransform = clip.positionX !== 50 || clip.positionY !== 50 || clip.scale !== 100 || clip.rotation !== 0;
       const clipTransform = hasCustomTransform
         ? `translate(${clip.positionX - 50}%, ${clip.positionY - 50}%) scale(${clip.scale / 100}) rotate(${clip.rotation}deg)`
@@ -536,7 +542,7 @@ const PreviewPanel = () => {
         <div
           key={clip.id}
           className="absolute inset-0"
-          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: combinedFilter, transform: combinedTransform }}
+          style={{ opacity: clip.fadeOpacity, zIndex: layerZ, filter: combinedFilter, transform: combinedTransform }}
         >
           <img
             src={clip.assetUrl}
@@ -576,7 +582,7 @@ const PreviewPanel = () => {
     if (clip.type === 'video' && hasUrl) {
       if (loadErrors.has(clip.id)) {
         return (
-          <div key={clip.id} className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: i, background: i === 0 ? '#0a0a0f' : 'transparent' }}>
+          <div key={clip.id} className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: layerZ, background: isBottomLayer ? '#0a0a0f' : 'transparent' }}>
             <Icon name="AlertTriangle" size={28} className="text-red-400 mb-2" />
             <span className="text-[11px] text-red-400 font-medium">Не удалось загрузить видео</span>
             <span className="text-[9px] text-muted-foreground mt-0.5">{clip.name}</span>
@@ -584,7 +590,7 @@ const PreviewPanel = () => {
         );
       }
       const clipPreview = selectedClipId === clip.id ? previewFilter : null;
-      const isBottomLayer = i === 0;
+      const isBottomLayer = clip.trackIndex === totalTracks - 1;
       const hasCustomTransform = clip.positionX !== 50 || clip.positionY !== 50 || clip.scale !== 100 || clip.rotation !== 0;
       const clipTransform = hasCustomTransform
         ? `translate(${clip.positionX - 50}%, ${clip.positionY - 50}%) scale(${clip.scale / 100}) rotate(${clip.rotation}deg)`
@@ -598,7 +604,7 @@ const PreviewPanel = () => {
         <div
           key={clip.id}
           className="absolute inset-0"
-          style={{ opacity: clip.fadeOpacity, zIndex: i, filter: combinedFilter, transform: combinedTransform }}
+          style={{ opacity: clip.fadeOpacity, zIndex: layerZ, filter: combinedFilter, transform: combinedTransform }}
         >
           <video
             ref={(el) => {
@@ -648,7 +654,7 @@ const PreviewPanel = () => {
       <div
         key={clip.id}
         className="absolute inset-0 flex items-center justify-center"
-        style={{ opacity: clip.opacity, zIndex: i }}
+        style={{ opacity: clip.opacity, zIndex: layerZ }}
       >
         <div
           className="w-full h-full flex items-center justify-center"
@@ -748,7 +754,7 @@ const PreviewPanel = () => {
                     key={clip.id}
                     className={`absolute cursor-grab active:cursor-grabbing ${selectedClipId === clip.id ? 'ring-1 ring-purple-400/60 ring-offset-0' : ''}`}
                     style={{
-                      zIndex: 100 + i,
+                      zIndex: 100 + (totalTracks - clip.trackIndex),
                       left: `${posX}%`,
                       top: `${posY}%`,
                       transform: 'translate(-50%, -50%)',

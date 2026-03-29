@@ -80,6 +80,7 @@ interface ClipInfo {
   textAnimationDuration?: number;
   textAnimationDelay?: number;
   trackMuted: boolean;
+  trackIndex: number;
   filters: ClipFilter[];
   transition?: ClipTransition;
   positionX: number;
@@ -1114,7 +1115,8 @@ export class VideoRenderer {
 
   private collectAllClips(tracks: Track[]): ClipInfo[] {
     const result: ClipInfo[] = [];
-    for (const track of tracks) {
+    for (let tIdx = 0; tIdx < tracks.length; tIdx++) {
+      const track = tracks[tIdx];
       if (!track.visible && track.type !== "audio") continue;
       for (const clip of track.clips) {
         result.push({
@@ -1144,6 +1146,7 @@ export class VideoRenderer {
           textAnimationDuration: clip.textAnimationDuration,
           textAnimationDelay: clip.textAnimationDelay,
           trackMuted: track.muted,
+          trackIndex: tIdx,
           filters: (clip.filters || []).map(f => ({ name: f.name, params: f.params })),
           transition: clip.transition,
           positionX: clip.positionX ?? 50,
@@ -1154,7 +1157,10 @@ export class VideoRenderer {
         });
       }
     }
-    return result.sort((a, b) => a.startTime - b.startTime);
+    return result.sort((a, b) => {
+      if (a.trackIndex !== b.trackIndex) return b.trackIndex - a.trackIndex;
+      return a.startTime - b.startTime;
+    });
   }
 
   private getUrlsToTry(assetId: string, originalUrl: string): string[] {
