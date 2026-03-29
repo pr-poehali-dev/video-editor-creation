@@ -823,7 +823,7 @@ export class VideoRenderer {
         const hasTextWidth = !!clip.textWidth;
         const maxTextW = hasTextWidth ? (clip.textWidth! / 100) * width : width * 0.96;
         ctx.textAlign = 'left';
-        const lines = this.wrapTextLines(ctx, textContent, maxTextW);
+        const lines = this.wrapTextWithDOM(textContent, family, fontSize, weight, maxTextW, hasTextWidth);
         const lineHeight = fontSize * 1.3;
         const totalTextH = lines.length * lineHeight;
 
@@ -1420,27 +1420,67 @@ export class VideoRenderer {
     return result.buffer;
   }
 
-  private wrapTextLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
-    const tolerance = maxWidth * 0.02;
-    const effectiveMax = maxWidth + tolerance;
-    const hardLines = text.split('\n');
-    const result: string[] = [];
-    for (const hardLine of hardLines) {
-      if (hardLine === '') { result.push(''); continue; }
-      const words = hardLine.split(/(\s+)/);
-      let current = '';
-      for (const word of words) {
-        const test = current + word;
-        if (ctx.measureText(test).width > effectiveMax && current.length > 0) {
-          result.push(current);
-          current = word.trimStart();
-        } else {
-          current = test;
-        }
-      }
-      if (current) result.push(current);
+  private wrapTextWithDOM(
+    text: string,
+    fontFamily: string,
+    fontSize: number,
+    fontWeight: number,
+    maxWidth: number,
+    hasTextWidth: boolean,
+  ): string[] {
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.visibility = 'hidden';
+    container.style.left = '-9999px';
+    container.style.top = '-9999px';
+    if (hasTextWidth) {
+      container.style.width = `${maxWidth}px`;
+    } else {
+      container.style.maxWidth = `${maxWidth}px`;
     }
-    return result.length > 0 ? result : [''];
+    container.style.fontFamily = fontFamily;
+    container.style.fontSize = `${fontSize}px`;
+    container.style.fontWeight = String(fontWeight);
+    container.style.lineHeight = '1.3';
+    container.style.whiteSpace = 'pre-wrap';
+    container.style.wordBreak = hasTextWidth ? 'break-word' : 'normal';
+    container.style.letterSpacing = 'normal';
+
+    const span = document.createElement('span');
+    span.textContent = text;
+    container.appendChild(span);
+    document.body.appendChild(container);
+
+    const range = document.createRange();
+    const lines: string[] = [];
+    const textNode = span.firstChild;
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
+      document.body.removeChild(container);
+      return text.split('\n').length > 0 ? text.split('\n') : [text];
+    }
+
+    const fullText = textNode.textContent || '';
+    let lastLineTop = -Infinity;
+    let currentLineStart = 0;
+
+    for (let i = 0; i < fullText.length; i++) {
+      range.setStart(textNode, i);
+      range.setEnd(textNode, i + 1);
+      const rect = range.getBoundingClientRect();
+      if (rect.top > lastLineTop + fontSize * 0.3) {
+        if (i > 0) {
+          lines.push(fullText.substring(currentLineStart, i));
+          currentLineStart = i;
+        }
+        lastLineTop = rect.top;
+      }
+    }
+    if (currentLineStart < fullText.length) {
+      lines.push(fullText.substring(currentLineStart));
+    }
+
+    document.body.removeChild(container);
+    return lines.length > 0 ? lines : [''];
   }
 
   private resolveAssetUrl(assetId: string, originalUrl: string): string {
