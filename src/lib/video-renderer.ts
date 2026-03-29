@@ -829,7 +829,24 @@ export class VideoRenderer {
         const hasTextWidth = !!clip.textWidth;
         const maxTextW = hasTextWidth ? (clip.textWidth! / 100) * width : width * 0.96;
         ctx.textAlign = 'left';
-        const lines = this.wrapTextWithDOM(textContent, family, fontSize, weight, maxTextW, hasTextWidth);
+        const lines = this.wrapTextForCanvas(ctx, textContent, maxTextW);
+        if (!this.wrapCache.has('__dbg_' + textContent.substring(0, 20))) {
+          this.wrapCache.set('__dbg_' + textContent.substring(0, 20), []);
+          const testM = ctx.measureText(textContent);
+          console.log('[TEXT RENDER]', JSON.stringify({
+            text: textContent.substring(0, 80),
+            fontSize, weight, family,
+            ctxFont: ctx.font,
+            canvasSize: [width, height],
+            clipTextWidth: clip.textWidth,
+            hasTextWidth,
+            maxTextW: Math.round(maxTextW),
+            fullTextWidth: Math.round(testM.width),
+            lines: lines,
+            linesCount: lines.length,
+            hasSubWords: !!(clip.subtitleWords && clip.subtitleWords.length > 0),
+          }));
+        }
         const lineHeight = fontSize * 1.3;
         const totalTextH = lines.length * lineHeight;
 
@@ -1476,67 +1493,36 @@ export class VideoRenderer {
     return result.buffer;
   }
 
-  private wrapTextWithDOM(
+  private wrapTextForCanvas(
+    ctx: CanvasRenderingContext2D,
     text: string,
-    fontFamily: string,
-    fontSize: number,
-    fontWeight: number,
     maxWidth: number,
-    hasTextWidth: boolean,
   ): string[] {
-    const cacheKey = `${text}|${fontFamily}|${fontSize}|${fontWeight}|${maxWidth}|${hasTextWidth}`;
+    const cacheKey = `${text}|${ctx.font}|${maxWidth}`;
     const cached = this.wrapCache.get(cacheKey);
     if (cached) return cached;
 
-    const container = document.createElement('div');
-    container.style.cssText = `
-      position:absolute;visibility:hidden;left:-9999px;top:-9999px;
-      ${hasTextWidth ? `width:${maxWidth}px` : `max-width:${maxWidth}px`};
-      font-family:${fontFamily};font-size:${fontSize}px;font-weight:${fontWeight};
-      line-height:1.3;white-space:pre-wrap;
-      word-break:${hasTextWidth ? 'break-word' : 'normal'};
-      letter-spacing:normal;margin:0;padding:0;border:0;
-      box-sizing:content-box;text-rendering:auto;
-    `;
-
-    const span = document.createElement('span');
-    span.style.cssText = 'margin:0;padding:0;border:0;';
-    span.textContent = text;
-    container.appendChild(span);
-    document.body.appendChild(container);
-
-    const range = document.createRange();
-    const lines: string[] = [];
-    const textNode = span.firstChild;
-    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
-      document.body.removeChild(container);
-      return text.split('\n').length > 0 ? text.split('\n') : [text];
-    }
-
-    const fullText = textNode.textContent || '';
-    let lastLineTop = -Infinity;
-    let currentLineStart = 0;
-
-    for (let i = 0; i < fullText.length; i++) {
-      range.setStart(textNode, i);
-      range.setEnd(textNode, i + 1);
-      const rect = range.getBoundingClientRect();
-      if (rect.top > lastLineTop + fontSize * 0.3) {
-        if (i > 0) {
-          lines.push(fullText.substring(currentLineStart, i));
-          currentLineStart = i;
+    const hardLines = text.split('\n');
+    const result: string[] = [];
+    for (const hardLine of hardLines) {
+      if (hardLine === '') { result.push(''); continue; }
+      const words = hardLine.split(' ');
+      let current = '';
+      for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        const test = current.length > 0 ? current + ' ' + word : word;
+        if (ctx.measureText(test).width > maxWidth && current.length > 0) {
+          result.push(current);
+          current = word;
+        } else {
+          current = test;
         }
-        lastLineTop = rect.top;
       }
+      if (current) result.push(current);
     }
-    if (currentLineStart < fullText.length) {
-      lines.push(fullText.substring(currentLineStart));
-    }
-
-    document.body.removeChild(container);
-    const result = lines.length > 0 ? lines : [''];
-    this.wrapCache.set(cacheKey, result);
-    return result;
+    const lines = result.length > 0 ? result : [''];
+    this.wrapCache.set(cacheKey, lines);
+    return lines;
   }
 
   private resolveAssetUrl(assetId: string, originalUrl: string): string {
