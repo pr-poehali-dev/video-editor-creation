@@ -1153,7 +1153,7 @@ export class VideoRenderer {
           positionY: clip.positionY ?? 50,
           scale: clip.scale ?? 100,
           rotation: clip.rotation ?? 0,
-          fitMode: clip.fitMode || 'contain',
+          fitMode: clip.fitMode || ((clip.type || track.type) === 'image' ? 'cover' : 'contain'),
         });
       }
     }

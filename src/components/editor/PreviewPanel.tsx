@@ -235,7 +235,7 @@ const PreviewPanel = () => {
             positionY: clip.positionY ?? 50,
             scale: clip.scale ?? 100,
             rotation: clip.rotation ?? 0,
-            fitMode: clip.fitMode || 'contain',
+            fitMode: clip.fitMode || (clip.type === 'image' ? 'cover' : 'contain'),
           });
         }
       }
@@ -450,8 +450,12 @@ const PreviewPanel = () => {
         const newW = Math.max(10, Math.min(100, Math.round(startW + delta)));
         updateClip(dragRef.current.clipId, { textWidth: newW });
       } else {
-        const newX = dragRef.current.startPosX + (dx / rect.width) * 100;
-        const newY = dragRef.current.startPosY + (dy / rect.height) * 100;
+        const clip = activeClips.find(c => c.id === dragRef.current!.clipId);
+        const isTxt = clip?.type === 'text';
+        const rawX = dragRef.current.startPosX + (dx / rect.width) * 100;
+        const rawY = dragRef.current.startPosY + (dy / rect.height) * 100;
+        const newX = isTxt ? Math.max(5, Math.min(95, rawX)) : rawX;
+        const newY = isTxt ? Math.max(5, Math.min(95, rawY)) : rawY;
         updateClip(dragRef.current.clipId, {
           positionX: Math.round(newX * 10) / 10,
           positionY: Math.round(newY * 10) / 10,

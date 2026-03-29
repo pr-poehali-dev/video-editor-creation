@@ -189,6 +189,7 @@ const useEditorStore = create<EditorStore>((set, get) => ({
       speed: 1,
       filters: [],
       keyframes: [],
+      fitMode: asset.type === 'image' ? 'cover' : undefined,
     };
 
     return {
@@ -320,7 +321,10 @@ const useEditorStore = create<EditorStore>((set, get) => ({
   },
 
   loadProjectData: (data) => set((state) => ({
-    tracks: data.tracks || state.tracks,
+    tracks: (data.tracks || state.tracks).map(t => ({
+      ...t,
+      clips: t.clips.map(c => c.type === 'image' && !c.fitMode ? { ...c, fitMode: 'cover' as const } : c),
+    })),
     assets: data.assets || state.assets,
     project: { ...state.project, ...(data.project || {}) },
     exportSettings: { ...state.exportSettings, ...(data.exportSettings || {}) },
