@@ -157,7 +157,8 @@ const PreviewPanel = () => {
           const elapsed = currentTime - clip.startTime;
           const remaining = clip.duration - elapsed;
           let fadeOpacity = clip.opacity;
-          if (clip.duration > 0.2 && (clip.type === 'image' || clip.type === 'video')) {
+          const isLongBg = clip.type === 'image' && clip.duration >= 10;
+          if (!isLongBg && clip.duration > 0.2 && (clip.type === 'image' || clip.type === 'video')) {
             const fadeDur = Math.min(0.5, clip.duration / 3);
             if (elapsed < fadeDur) fadeOpacity = clip.opacity * (elapsed / fadeDur);
             else if (remaining < fadeDur) fadeOpacity = clip.opacity * (remaining / fadeDur);

@@ -745,8 +745,9 @@ export class VideoRenderer {
       const elapsed = currentTime - clip.startTime;
       const remaining = clip.duration - elapsed;
       let fadeAlpha = clip.opacity;
+      const isLongBg = clip.type === "image" && clip.duration >= 10;
 
-      if (clip.duration > 0.2 && (clip.type === "image" || clip.type === "video")) {
+      if (!isLongBg && clip.duration > 0.2 && (clip.type === "image" || clip.type === "video")) {
         const fadeDur = Math.min(FADE_DURATION, clip.duration / 3);
         if (elapsed < fadeDur) {
           fadeAlpha = clip.opacity * (elapsed / fadeDur);
