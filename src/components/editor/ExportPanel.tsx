@@ -214,8 +214,8 @@ const ExportPanel = () => {
   }, [resultUrl, resultFileName, exportSettings.format, isDemo]);
 
   const formatSize = (bytes: number) => {
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} КБ`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
   };
 
   const isGif = exportSettings.format === 'gif';

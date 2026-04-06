@@ -166,7 +166,7 @@ const TourTooltip = ({
               <>
                 <Icon name="Check" size={14} className="mr-1" />
                 <span className="hidden sm:inline">Завершить</span>
-                <span className="sm:hidden">OK</span>
+                <span className="sm:hidden">Готово</span>
               </>
             ) : (
               <>

@@ -861,7 +861,7 @@ const MediaPanel = () => {
                     >
                       <Icon name={item.icon} size={12} className="text-muted-foreground" />
                       <span className="text-xs">{item.name}</span>
-                      <span className="ml-auto text-[8px] text-green-400">FREE</span>
+                      <span className="ml-auto text-[8px] text-green-400">Бесплатно</span>
                     </div>
                   ))}
                 </div>
@@ -884,7 +884,7 @@ const MediaPanel = () => {
                       >
                         <Icon name={p.icon || 'Palette'} size={12} className="text-primary" />
                         <span className="text-xs font-medium">{p.name}</span>
-                        <span className="ml-auto text-[8px] text-primary">PRO</span>
+                        <span className="ml-auto text-[8px] text-primary">ПРО</span>
                       </div>
                       {p.features.length > 0 && (
                         <div className="pl-7 space-y-0.5">
@@ -1009,7 +1009,7 @@ const MediaPanel = () => {
                     <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-primary/5">
                       <Icon name={p.icon || 'Sparkles'} size={12} className="text-primary" />
                       <span className="text-xs font-medium">{p.name}</span>
-                      <span className="ml-auto text-[8px] text-primary">PRO</span>
+                      <span className="ml-auto text-[8px] text-primary">ПРО</span>
                     </div>
                     <div className="grid grid-cols-2 gap-1 mt-1">
                       {p.features.map((f, i) => (
@@ -1086,7 +1086,7 @@ const MediaPanel = () => {
                       <div className="flex items-center gap-2 px-2 py-1.5 rounded bg-primary/5">
                         <Icon name={p.icon || 'Type'} size={12} className="text-primary" />
                         <span className="text-xs font-medium">{p.name}</span>
-                        <span className="ml-auto text-[8px] text-primary">PRO</span>
+                        <span className="ml-auto text-[8px] text-primary">ПРО</span>
                       </div>
                       <div className="space-y-0.5 mt-1">
                         {p.features.map((f, i) => (

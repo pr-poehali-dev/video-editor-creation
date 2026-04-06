@@ -159,7 +159,7 @@ const PhotoBankPhotoGrid = ({
       low_contrast: 'Низкий контраст',
       corrupt_file: 'Поврежденный файл',
       analysis_error: 'Ошибка анализа',
-      ok: 'OK'
+      ok: 'Норма'
     };
     return reason ? labels[reason] || reason : 'Неизвестно';
   };
