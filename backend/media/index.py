@@ -13,7 +13,7 @@ CORS = {
     'Access-Control-Allow-Headers': 'Content-Type, X-Auth-Token',
     'Access-Control-Max-Age': '86400',
 }
-MAX_FILE_SIZE = 150 * 1024 * 1024
+MAX_FILE_SIZE = 1024 * 1024 * 1024
 CHUNK_SIZE = 1 * 1024 * 1024
 
 ALLOWED_TYPES = {
@@ -159,7 +159,7 @@ def handle_upload(conn, user, event):
 
     file_bytes = base64.b64decode(file_data_b64)
     if len(file_bytes) > MAX_FILE_SIZE:
-        return err('Файл слишком большой (макс 150 МБ)')
+        return err('Файл слишком большой (макс 1 ГБ)')
 
     file_type = ALLOWED_TYPES[mime_type]
     ext = file_name.rsplit('.', 1)[-1].lower() if '.' in file_name else 'bin'
@@ -215,7 +215,7 @@ def handle_direct_init(conn, user, event):
     if mime_type not in ALLOWED_TYPES:
         return err(f'Тип файла {mime_type} не поддерживается')
     if file_size > MAX_FILE_SIZE:
-        return err(f'Файл слишком большой (макс {MAX_FILE_SIZE // (1024*1024)} МБ)')
+        return err('Файл слишком большой (макс 1 ГБ)')
 
     ext = file_name.rsplit('.', 1)[-1].lower() if '.' in file_name else 'bin'
     unique_name = f"{uuid.uuid4().hex}.{ext}"
@@ -327,7 +327,7 @@ def handle_chunked_init(conn, user, event):
     if mime_type not in ALLOWED_TYPES:
         return err(f'Тип файла {mime_type} не поддерживается')
     if file_size > MAX_FILE_SIZE:
-        return err(f'Файл слишком большой (макс {MAX_FILE_SIZE // (1024*1024)} МБ)')
+        return err('Файл слишком большой (макс 1 ГБ)')
 
     upload_id = uuid.uuid4().hex
     ext = file_name.rsplit('.', 1)[-1].lower() if '.' in file_name else 'bin'

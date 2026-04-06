@@ -90,6 +90,85 @@ const PropertiesPanel = () => {
             </div>
           </div>
 
+          {(selectedClip.type === 'video' || selectedClip.type === 'audio') && (() => {
+            const asset = useEditorStore.getState().assets.find(a => a.id === selectedClip.assetId);
+            const maxDuration = asset?.duration || selectedClip.duration + (selectedClip.offset || 0);
+            const trimStart = selectedClip.offset || 0;
+            const trimEnd = trimStart + selectedClip.duration;
+            return (
+              <>
+                <Separator className="bg-border/50" />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <Icon name="Scissors" size={10} className="text-blue-400" />
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Обрезка</span>
+                  </div>
+                  <div className="text-[9px] text-muted-foreground mb-1">
+                    Источник: {maxDuration.toFixed(1)}с
+                  </div>
+                  <div className="relative h-8 bg-secondary/50 rounded border border-border overflow-hidden">
+                    <div
+                      className="absolute top-0 bottom-0 bg-blue-500/20 border-x-2 border-blue-500"
+                      style={{
+                        left: `${(trimStart / maxDuration) * 100}%`,
+                        width: `${(selectedClip.duration / maxDuration) * 100}%`,
+                      }}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-[9px] text-muted-foreground">
+                        {trimStart.toFixed(1)}с — {trimEnd.toFixed(1)}с
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground">От (с)</Label>
+                      <Input
+                        type="number"
+                        value={trimStart.toFixed(1)}
+                        onChange={e => {
+                          const newTrimStart = Math.max(0, Math.min(parseFloat(e.target.value) || 0, maxDuration - 0.2));
+                          const newDuration = Math.max(0.2, trimEnd - newTrimStart);
+                          updateClip(selectedClip.id, { offset: newTrimStart, duration: newDuration });
+                        }}
+                        className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
+                        step="0.1"
+                        min="0"
+                        max={(maxDuration - 0.2).toFixed(1)}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] text-muted-foreground">До (с)</Label>
+                      <Input
+                        type="number"
+                        value={trimEnd.toFixed(1)}
+                        onChange={e => {
+                          const newTrimEnd = Math.max(trimStart + 0.2, Math.min(parseFloat(e.target.value) || 0, maxDuration));
+                          updateClip(selectedClip.id, { duration: newTrimEnd - trimStart });
+                        }}
+                        className="h-7 text-xs mt-0.5 bg-secondary/50 border-border"
+                        step="0.1"
+                        min={(trimStart + 0.2).toFixed(1)}
+                        max={maxDuration.toFixed(1)}
+                      />
+                    </div>
+                  </div>
+                  {trimStart > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full h-6 text-[10px]"
+                      onClick={() => updateClip(selectedClip.id, { offset: 0, duration: maxDuration })}
+                    >
+                      <Icon name="RotateCcw" size={10} className="mr-1" />
+                      Сбросить обрезку
+                    </Button>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+
           <Separator className="bg-border/50" />
 
           <div className="space-y-2">

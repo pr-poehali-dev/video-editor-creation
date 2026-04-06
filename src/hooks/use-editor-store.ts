@@ -253,7 +253,8 @@ const useEditorStore = create<EditorStore>((set, get) => ({
           const actualDelta = newStart - c.startTime;
           const newDuration = c.duration - actualDelta;
           if (newDuration < 0.2) return c;
-          return { ...c, startTime: newStart, duration: newDuration };
+          const newOffset = Math.max(0, (c.offset || 0) + actualDelta);
+          return { ...c, startTime: newStart, duration: newDuration, offset: newOffset };
         } else {
           const newDuration = Math.max(0.2, c.duration + delta);
           return { ...c, duration: newDuration };

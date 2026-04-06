@@ -53,6 +53,7 @@ interface ActiveClip {
   trackType: string;
   trackVisible: boolean;
   duration: number;
+  offset: number;
   trackMuted: boolean;
   trackIndex: number;
   filters: Array<{ name: string; type: string; params: Record<string, number | string | boolean> }>;
@@ -230,6 +231,7 @@ const PreviewPanel = () => {
             clipVolume: clip.volume,
             startTime: clip.startTime,
             duration: clip.duration,
+            offset: clip.offset || 0,
             trackType: track.type,
             trackVisible: track.visible,
             trackMuted: track.muted,
@@ -313,7 +315,7 @@ const PreviewPanel = () => {
           audio.loop = false;
           audioRefs.current.set(clip.id, audio);
         }
-        const clipOffset = currentTime - clip.startTime;
+        const clipOffset = (currentTime - clip.startTime) + (clip.offset || 0);
         audio.currentTime = clipOffset;
         audio.volume = Math.min(1, clip.clipVolume * globalVol);
         audio.play().catch(() => {});
@@ -335,7 +337,7 @@ const PreviewPanel = () => {
           audio.loop = false;
           audioRefs.current.set(clip.id, audio);
         }
-        const clipOffset = currentTime - clip.startTime;
+        const clipOffset = (currentTime - clip.startTime) + (clip.offset || 0);
         if (Math.abs(audio.currentTime - clipOffset) > 0.5) {
           audio.currentTime = clipOffset;
         }
@@ -350,7 +352,7 @@ const PreviewPanel = () => {
         const video = videoRefs.current.get(clip.id);
         if (video) {
           video.dataset.trackMuted = clip.trackMuted ? '1' : '';
-          const clipOffset = currentTime - clip.startTime;
+          const clipOffset = (currentTime - clip.startTime) + (clip.offset || 0);
           if (Math.abs(video.currentTime - clipOffset) > 0.5) {
             video.currentTime = clipOffset;
           }

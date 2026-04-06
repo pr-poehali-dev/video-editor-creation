@@ -4,7 +4,7 @@ const IMAGE_QUALITY_START = 0.92;
 const IMAGE_QUALITY_MIN = 0.7;
 const IMAGE_QUALITY_STEP = 0.05;
 
-const VIDEO_TARGET_SIZE = 100 * 1024 * 1024;
+const VIDEO_TARGET_SIZE = 900 * 1024 * 1024;
 
 export interface CompressionResult {
   file: File;

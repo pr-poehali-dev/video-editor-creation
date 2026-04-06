@@ -110,7 +110,7 @@ const getMediaDuration = (file: File): Promise<number> => {
 };
 
 const DIRECT_UPLOAD_LIMIT = 2 * 1024 * 1024;
-const MAX_UPLOAD_SIZE = 150 * 1024 * 1024;
+const MAX_UPLOAD_SIZE = 1024 * 1024 * 1024;
 const CHUNK_SIZE = 1 * 1024 * 1024;
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -405,7 +405,7 @@ const MediaPanel = () => {
     if (uploadTarget.size > MAX_UPLOAD_SIZE) {
       setUploadErrors(prev => [...prev, {
         name: file.name,
-        error: `Файл слишком большой (${formatSize(file.size)}). Макс: 150 МБ`,
+        error: `Файл слишком большой (${formatSize(file.size)}). Макс: 1 ГБ`,
         file,
         assetId: asset.id,
         duration,
