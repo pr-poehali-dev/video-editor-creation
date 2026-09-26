@@ -270,7 +270,7 @@ const Admin = () => {
             <button onClick={() => navigate('/dashboard')} className="nle-button flex items-center gap-1.5">
               <Icon name="User" size={12} /> Кабинет
             </button>
-            <button onClick={() => navigate('/')} className="nle-button flex items-center gap-1.5">
+            <button onClick={() => navigate('/editor')} className="nle-button flex items-center gap-1.5">
               <Icon name="Clapperboard" size={12} /> Редактор
             </button>
             <button onClick={loadAll} className="nle-button">

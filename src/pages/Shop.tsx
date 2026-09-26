@@ -171,7 +171,7 @@ const Shop = () => {
                 <span className="text-sm font-semibold">{balance.toFixed(0)} ₽</span>
               </div>
             )}
-            <button onClick={() => navigate('/')} className="nle-button flex items-center gap-1.5">
+            <button onClick={() => navigate('/editor')} className="nle-button flex items-center gap-1.5">
               <Icon name="Clapperboard" size={12} /> Редактор
             </button>
             {isAuthenticated ? (
@@ -260,7 +260,7 @@ const Shop = () => {
                     )}
                     {item.owned ? (
                       <button
-                        onClick={(e) => { e.stopPropagation(); navigate('/'); }}
+                        onClick={(e) => { e.stopPropagation(); navigate('/editor'); }}
                         className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors flex items-center gap-1"
                       >
                         <Icon name="Clapperboard" size={10} /> Редактор
@@ -382,7 +382,7 @@ const Shop = () => {
                     {selectedItem.category === 'features' && 'Расширение активировано во вкладке «Эффекты» в редакторе'}
                   </div>
                   <button
-                    onClick={() => { setSelectedItem(null); navigate('/'); }}
+                    onClick={() => { setSelectedItem(null); navigate('/editor'); }}
                     className="w-full mt-3 py-2.5 rounded-lg font-medium text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
                   >
                     <Icon name="Clapperboard" size={16} /> Открыть редактор

@@ -15,7 +15,7 @@ const Auth = () => {
 
   useEffect(() => {
     loadProfile().then(() => {
-      if (useAuth.getState().isAuthenticated) navigate('/');
+      if (useAuth.getState().isAuthenticated) navigate('/dashboard');
     });
   }, []);
 
@@ -27,7 +27,7 @@ const Auth = () => {
       } else {
         await register(email, password, name);
       }
-      navigate('/');
+      navigate('/dashboard');
     } catch {}
   };
 
