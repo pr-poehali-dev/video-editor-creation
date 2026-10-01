@@ -1,90 +1,97 @@
 import Icon from '@/components/ui/icon';
 
-const features = [
+const tasks = [
   {
-    icon: 'Layers',
-    title: 'Многодорожечный таймлайн',
-    text: 'Видео, аудио, картинки и текст на отдельных дорожках. Перетаскивайте, режьте и меняйте порядок мышью.',
-    accent: 'from-primary/20 to-primary/5',
-  },
-  {
+    tc: '00:00:07',
+    problem: 'В начале ролика — чужая заставка',
+    fix: 'Задаёшь «от» и «до» в секундах — лишнее не попадёт в итоговое видео.',
+    tool: 'Обрезка',
     icon: 'Scissors',
-    title: 'Обрезка начала и конца',
-    text: 'Уберите заставку или лишний хвост за пару секунд — точная подрезка по секундам с визуальной шкалой.',
-    accent: 'from-accent/20 to-accent/5',
   },
   {
+    tc: '00:00:21',
+    problem: 'Без звука ролик никто не досматривает',
+    fix: 'Речь распознаётся автоматически, субтитры подсвечивают каждое слово.',
+    tool: 'Автосубтитры',
     icon: 'Captions',
-    title: 'Субтитры автоматически',
-    text: 'Распознаём речь и расставляем субтитры по словам. Остаётся только выбрать стиль оформления.',
-    accent: 'from-primary/20 to-primary/5',
   },
   {
-    icon: 'Wand2',
-    title: 'Эффекты и переходы',
-    text: 'Цветокоррекция, размытие, виньетка, глитч, растворение и слайды — применяются в один клик.',
-    accent: 'from-accent/20 to-accent/5',
+    tc: '00:00:38',
+    problem: 'Нужно показать бренд в кадре',
+    fix: 'Ставишь свой логотип в угол кадра: размер, отступ и прозрачность — ползунками.',
+    tool: 'Наложение',
+    icon: 'Stamp',
   },
   {
-    icon: 'Type',
-    title: 'Титры и анимация текста',
-    text: 'Заголовки, нижние трети, выноски и конечные титры с анимацией появления и своими шрифтами.',
-    accent: 'from-primary/20 to-primary/5',
+    tc: '00:00:52',
+    problem: 'Исходник весит под гигабайт',
+    fix: 'Файл грузится частями и докачивается после обрыва связи. Лимит — 1 ГБ.',
+    tool: 'Загрузка',
+    icon: 'HardDriveUpload',
   },
   {
-    icon: 'Music',
-    title: 'Работа со звуком',
-    text: 'Отдельная громкость для каждого клипа, фоновая музыка, озвучка и извлечение аудио из видео.',
-    accent: 'from-accent/20 to-accent/5',
+    tc: '00:01:05',
+    problem: 'Склейки выглядят резко',
+    fix: 'Растворение, слайды, засветка, глитч — переход ставится одним кликом.',
+    tool: 'Переходы',
+    icon: 'Blend',
   },
   {
-    icon: 'Gauge',
-    title: 'Скорость и рампы',
-    text: 'Замедление, ускорение, стоп-кадр и плавные скоростные рампы для динамичных склеек.',
-    accent: 'from-primary/20 to-primary/5',
-  },
-  {
-    icon: 'CloudUpload',
-    title: 'Файлы до 1 ГБ',
-    text: 'Загружайте большие исходники — они режутся на части и докачиваются при обрыве связи.',
-    accent: 'from-accent/20 to-accent/5',
-  },
-  {
+    tc: '00:01:19',
+    problem: 'Видео лежит в соцсети, а не на компьютере',
+    fix: 'Вставляешь ссылку — ролик сам приезжает в проект.',
+    tool: 'Импорт по ссылке',
     icon: 'Link2',
-    title: 'Импорт по ссылке',
-    text: 'Вставьте ссылку на видео из соцсети или файлообменника — заберём файл прямо в проект.',
-    accent: 'from-primary/20 to-primary/5',
   },
 ];
 
 const LandingFeatures = () => (
-  <section id="features" className="relative py-20 sm:py-28">
-    <div className="container mx-auto px-4 sm:px-6">
-      <div className="max-w-2xl mx-auto text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass-card text-xs text-primary">
-          <Icon name="Zap" size={12} />
-          Возможности
-        </div>
-        <h2 className="mt-5 text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight">
-          Всё для монтажа <span className="text-gradient">в одном окне</span>
-        </h2>
-        <p className="mt-4 text-muted-foreground leading-relaxed">
-          Инструменты профессиональной программы, но в интерфейсе, который понятен с первого раза.
-        </p>
-      </div>
-
-      <div className="mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-        {features.map(f => (
-          <div key={f.title} className="group p-6 rounded-2xl glass-card glass-card-hover">
-            <div
-              className={`w-11 h-11 rounded-xl bg-gradient-to-br ${f.accent} border border-border/60 flex items-center justify-center`}
-            >
-              <Icon name={f.icon} size={20} className="text-primary" />
-            </div>
-            <h3 className="mt-4 font-semibold text-base">{f.title}</h3>
-            <p className="mt-2 text-sm text-muted-foreground leading-relaxed">{f.text}</p>
+  <section id="tasks" className="relative py-20 sm:py-28 px-4 sm:px-6 scroll-mt-16">
+    <div className="max-w-7xl mx-auto">
+      <div className="grid lg:grid-cols-[320px_1fr] gap-10 lg:gap-16">
+        <div className="lg:sticky lg:top-28 self-start">
+          <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-lp-amber">Сцена 01</div>
+          <h2 className="mt-4 font-display font-black uppercase text-4xl sm:text-5xl leading-[0.95] tracking-tight">
+            Монтажный
+            <br />
+            лист
+          </h2>
+          <p className="mt-5 text-lp-dim leading-relaxed">
+            Мы не начинаем с кнопок. Сначала — с того, что мешает ролику выстрелить. Каждая
+            строка — реальная задача и то, как она решается в редакторе.
+          </p>
+          <div className="mt-6 inline-flex items-center gap-2 font-mono text-[11px] text-lp-dim">
+            <Icon name="ListChecks" size={14} className="text-lp-amber" />
+            {tasks.length} задач · 0 программ на установку
           </div>
-        ))}
+        </div>
+
+        <ol className="border-t border-lp-line">
+          {tasks.map((t, i) => (
+            <li
+              key={t.tc}
+              className="group grid grid-cols-[auto_1fr] sm:grid-cols-[96px_1fr_auto] gap-x-5 gap-y-2 py-6 sm:py-7 border-b border-lp-line hover:bg-lp-panel/70 transition-colors px-2 sm:px-4 -mx-2 sm:-mx-4"
+            >
+              <div className="font-mono text-xs text-lp-dim tabular-nums pt-1 group-hover:text-lp-amber transition-colors">
+                <span className="block text-[10px] opacity-60">#{String(i + 1).padStart(2, '0')}</span>
+                {t.tc}
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-lg sm:text-xl leading-snug">{t.problem}</h3>
+                <p className="mt-2 text-sm sm:text-[15px] text-lp-dim leading-relaxed max-w-xl">
+                  <span className="text-lp-amber mr-1.5">→</span>
+                  {t.fix}
+                </p>
+              </div>
+              <div className="col-start-2 sm:col-start-auto flex sm:justify-end items-start">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-lp-line font-mono text-[10px] uppercase tracking-wider text-lp-text group-hover:border-lp-amber group-hover:bg-lp-amber group-hover:text-lp-ink transition-colors">
+                  <Icon name={t.icon} size={12} />
+                  {t.tool}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ol>
       </div>
     </div>
   </section>

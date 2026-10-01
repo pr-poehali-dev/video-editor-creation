@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import LandingHeader from '@/components/landing/LandingHeader';
 import LandingHero from '@/components/landing/LandingHero';
+import LandingFilmStrip from '@/components/landing/LandingFilmStrip';
 import LandingFeatures from '@/components/landing/LandingFeatures';
 import LandingHowItWorks from '@/components/landing/LandingHowItWorks';
 import LandingFormats from '@/components/landing/LandingFormats';
@@ -17,18 +18,23 @@ const Home = () => {
   }, [loadProfile]);
 
   useEffect(() => {
-    document.title = 'VideoForge — видеоредактор в браузере';
+    document.title = 'VideoForge — монтаж видео в браузере';
+    const html = document.documentElement;
+    const prev = html.style.scrollBehavior;
+    html.style.scrollBehavior = 'smooth';
+    return () => {
+      html.style.scrollBehavior = prev;
+    };
   }, []);
 
   return (
-    <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
+    <div className="lp lp-grain min-h-screen overflow-x-hidden font-sans">
       <LandingHeader />
       <main>
         <LandingHero />
-        <div className="section-divider" />
+        <LandingFilmStrip />
         <LandingFeatures />
         <LandingHowItWorks />
-        <div className="section-divider" />
         <LandingFormats />
         <LandingFaq />
         <LandingCta />

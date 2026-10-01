@@ -1,81 +1,37 @@
 import { Link } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
 
-const columns = [
-  {
-    title: 'Продукт',
-    links: [
-      { label: 'Возможности', to: '#features' },
-      { label: 'Как это работает', to: '#how' },
-      { label: 'Форматы экспорта', to: '#formats' },
-      { label: 'Магазин эффектов', to: '/shop' },
-    ],
-  },
-  {
-    title: 'Начать',
-    links: [
-      { label: 'Демо-режим', to: '/demo' },
-      { label: 'Регистрация', to: '/auth' },
-      { label: 'Мои проекты', to: '/dashboard' },
-      { label: 'Частые вопросы', to: '#faq' },
-    ],
-  },
+const links = [
+  { label: 'Демо', to: '/demo' },
+  { label: 'Регистрация', to: '/auth' },
+  { label: 'Мои проекты', to: '/dashboard' },
+  { label: 'Магазин эффектов', to: '/shop' },
+  { label: 'Конфиденциальность', to: '/privacy-policy' },
 ];
 
 const LandingFooter = () => (
-  <footer className="relative border-t border-border/60">
-    <div className="container mx-auto px-4 sm:px-6 py-14">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-12">
-        <div className="col-span-2">
-          <Link to="/" className="inline-flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-              <Icon name="Film" size={18} className="text-white" />
-            </div>
-            <span className="text-lg font-bold tracking-tight">VideoForge</span>
-          </Link>
-          <p className="mt-4 text-sm text-muted-foreground leading-relaxed max-w-xs">
-            Видеоредактор в браузере: таймлайн, эффекты, субтитры и экспорт до 4K без установки
-            программ.
-          </p>
+  <footer className="relative border-t border-lp-line">
+    <div className="h-5 bg-lp-line lp-sprockets" />
+    <div className="px-4 sm:px-6 py-12">
+      <div className="max-w-7xl mx-auto">
+        <div className="font-display font-black uppercase text-[10.5vw] xl:text-[8.5rem] leading-[0.85] whitespace-nowrap tracking-tighter text-lp-panel select-none">
+          VideoForge
         </div>
-
-        {columns.map(col => (
-          <div key={col.title}>
-            <h4 className="text-sm font-semibold">{col.title}</h4>
-            <ul className="mt-4 space-y-2.5">
-              {col.links.map(l => (
-                <li key={l.label}>
-                  {l.to.startsWith('#') ? (
-                    <a
-                      href={l.to}
-                      className="text-sm text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      {l.label}
-                    </a>
-                  ) : (
-                    <Link
-                      to={l.to}
-                      className="text-sm text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      {l.label}
-                    </Link>
-                  )}
-                </li>
-              ))}
-            </ul>
+        <div className="mt-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex items-center gap-3">
+            <span className="w-8 h-8 rounded-md bg-lp-amber flex items-center justify-center">
+              <Icon name="Clapperboard" size={16} className="text-lp-ink" />
+            </span>
+            <span className="text-sm text-lp-dim">Монтаж в браузере · © {new Date().getFullYear()}</span>
           </div>
-        ))}
-      </div>
-
-      <div className="section-divider my-10" />
-
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <span className="text-xs text-muted-foreground">
-          © {new Date().getFullYear()} VideoForge. Все права защищены.
-        </span>
-        <Link to="/privacy-policy" className="text-xs text-muted-foreground hover:text-primary transition-colors">
-          Политика конфиденциальности
-        </Link>
+          <nav className="flex flex-wrap gap-x-6 gap-y-2">
+            {links.map(l => (
+              <Link key={l.to} to={l.to} className="font-mono text-[11px] uppercase tracking-wider text-lp-dim hover:text-lp-amber transition-colors">
+                {l.label}
+              </Link>
+            ))}
+          </nav>
+        </div>
       </div>
     </div>
   </footer>

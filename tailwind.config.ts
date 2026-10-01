@@ -20,8 +20,21 @@ export default {
 		extend: {
 			fontFamily: {
 				sans: ['Inter', 'system-ui', 'sans-serif'],
+				display: ['Unbounded', 'Inter', 'sans-serif'],
+				mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
 			},
 			colors: {
+				lp: {
+					ink: 'hsl(var(--lp-ink) / <alpha-value>)',
+					panel: 'hsl(var(--lp-panel) / <alpha-value>)',
+					line: 'hsl(var(--lp-line) / <alpha-value>)',
+					rec: 'hsl(var(--lp-rec) / <alpha-value>)',
+					amber: 'hsl(var(--lp-amber) / <alpha-value>)',
+					cyan: 'hsl(var(--lp-cyan) / <alpha-value>)',
+					green: 'hsl(var(--lp-green) / <alpha-value>)',
+					text: 'hsl(var(--lp-text) / <alpha-value>)',
+					dim: 'hsl(var(--lp-dim) / <alpha-value>)',
+				},
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',
