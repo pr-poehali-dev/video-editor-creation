@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import useLpTheme from '@/hooks/use-lp-theme';
 
 interface Project {
   id: number;
@@ -88,6 +89,7 @@ const Dashboard = () => {
   const [publicProjects, setPublicProjects] = useState<PublicProject[]>([]);
   const [cloningPublicId, setCloningPublicId] = useState<number | null>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
+  useLpTheme();
 
   useEffect(() => {
     loadProfile().then(() => {
@@ -265,88 +267,119 @@ const Dashboard = () => {
 
   if (!isAuthenticated || !user) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'hsl(var(--editor-bg))' }}>
-        <Icon name="Loader2" size={32} className="animate-spin text-primary" />
+      <div className="lp min-h-screen flex flex-col items-center justify-center gap-3">
+        <Icon name="Loader2" size={28} className="animate-spin text-lp-amber" />
+        <span className="font-mono text-[11px] uppercase tracking-wider text-lp-dim">Готовим площадку...</span>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen" style={{ background: 'hsl(var(--editor-bg))' }}>
-      <header className="border-b border-border" style={{ background: 'hsl(var(--editor-panel))' }}>
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-                <Icon name="Film" size={16} className="text-primary" />
-              </div>
-              <span className="font-semibold text-sm">VideoForge</span>
+    <div className="lp lp-grain min-h-screen">
+      <header className="sticky top-0 z-40 border-b border-lp-line bg-lp-ink/85 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={() => navigate('/')} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity shrink-0">
+              <span className="w-8 h-8 rounded-md bg-lp-amber flex items-center justify-center">
+                <Icon name="Clapperboard" size={16} className="text-lp-ink" />
+              </span>
+              <span className="hidden sm:inline font-display font-bold text-[15px] tracking-tight">VideoForge</span>
             </button>
-            <Separator orientation="vertical" className="h-6 bg-border/50" />
-            <span className="text-xs text-muted-foreground">Личный кабинет</span>
+            <Separator orientation="vertical" className="hidden md:block h-6 bg-lp-line" />
+            <span className="hidden md:inline font-mono text-[11px] uppercase tracking-wider text-lp-dim">Монтажная</span>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'hsl(var(--editor-bg))' }}>
-              <Icon name="Wallet" size={14} className="text-green-400" />
-              <span className="text-sm font-semibold">{balance.toFixed(0)} ₽</span>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 h-8 px-2.5 rounded border border-lp-line font-mono text-xs tabular-nums">
+              <Icon name="Wallet" size={13} className="text-lp-green" />
+              <span className="font-bold">{balance.toFixed(0)} ₽</span>
             </div>
-            <button onClick={() => navigate('/shop')} className="nle-button flex items-center gap-1.5">
+            <button onClick={() => navigate('/shop')} className="nle-button h-8 flex items-center gap-1.5">
               <Icon name="Store" size={12} />
-              <span>Магазин</span>
-            </button>
-            <button onClick={handleCreateProject} className="nle-button flex items-center gap-1.5">
-              <Icon name="Clapperboard" size={12} />
-              <span>Новый проект</span>
+              <span className="hidden sm:inline">Магазин</span>
             </button>
             {user.role === 'admin' && (
-              <button onClick={() => navigate('/admin')} className="nle-button flex items-center gap-1.5">
+              <button onClick={() => navigate('/admin')} className="nle-button h-8 flex items-center gap-1.5">
                 <Icon name="Shield" size={12} />
-                <span>Админ</span>
+                <span className="hidden sm:inline">Админ</span>
               </button>
             )}
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                <span className="text-xs font-bold text-primary">{user.name.charAt(0).toUpperCase()}</span>
+            <div className="flex items-center gap-2 pl-1">
+              <div className="w-8 h-8 rounded-md bg-lp-panel border border-lp-line flex items-center justify-center">
+                <span className="font-display text-xs font-bold text-lp-amber">{user.name.charAt(0).toUpperCase()}</span>
               </div>
-              <div className="hidden sm:block">
+              <div className="hidden lg:block leading-tight">
                 <div className="text-xs font-medium">{user.name}</div>
-                <div className="text-[10px] text-muted-foreground">{user.email}</div>
+                <div className="font-mono text-[10px] text-lp-dim">{user.email}</div>
               </div>
             </div>
-            <button onClick={handleLogout} className="nle-button">
+            <button onClick={handleLogout} className="nle-button h-8" title="Выйти">
               <Icon name="LogOut" size={12} />
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-6">
-        <Tabs defaultValue="projects" className="space-y-4">
-          <TabsList className="bg-transparent gap-1">
-            <TabsTrigger value="projects" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
-              <Icon name="FolderOpen" size={12} className="mr-1.5" /> Мои проекты
-            </TabsTrigger>
-            <TabsTrigger value="gallery" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
-              <Icon name="Globe" size={12} className="mr-1.5" /> Галерея
-            </TabsTrigger>
-            <TabsTrigger value="wallet" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
-              <Icon name="Wallet" size={12} className="mr-1.5" /> Кошелёк
-            </TabsTrigger>
-            <TabsTrigger value="purchases" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
-              <Icon name="ShoppingBag" size={12} className="mr-1.5" /> Покупки
-            </TabsTrigger>
-            <TabsTrigger value="media" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
-              <Icon name="Image" size={12} className="mr-1.5" /> Медиа ({mediaFiles.length})
-            </TabsTrigger>
-            <TabsTrigger value="profile" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground text-xs">
-              <Icon name="User" size={12} className="mr-1.5" /> Профиль
-            </TabsTrigger>
+      <main className="max-w-6xl mx-auto px-4 py-8 sm:py-10">
+        <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-lp-line">
+          <div>
+            <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-lp-amber">
+              Монтажная · {new Date().toLocaleDateString('ru-RU')}
+            </div>
+            <h1 className="mt-4 font-hero uppercase text-4xl sm:text-5xl leading-[1] tracking-tight">
+              Привет,
+              <br />
+              <span className="text-lp-amber">{user.name || 'режиссёр'}</span>
+            </h1>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 md:items-end">
+            <dl className="grid grid-cols-3 border-y border-lp-line divide-x divide-lp-line">
+              {[
+                [myProjects.length, 'проектов'],
+                [mediaFiles.length, 'файлов'],
+                [`${balance.toFixed(0)} ₽`, 'баланс'],
+              ].map(([v, l]) => (
+                <div key={String(l)} className="py-2.5 px-4">
+                  <dt className="font-display font-bold text-lg tabular-nums">{v}</dt>
+                  <dd className="font-mono text-[10px] uppercase tracking-wider text-lp-dim">{l}</dd>
+                </div>
+              ))}
+            </dl>
+            <button
+              onClick={handleCreateProject}
+              className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-md bg-lp-amber text-lp-ink font-display font-bold uppercase text-sm tracking-wide hover:brightness-110 transition"
+            >
+              <Icon name="Plus" size={18} />
+              Новый проект
+            </button>
+          </div>
+        </section>
+
+        <Tabs defaultValue="projects" className="mt-6 space-y-5">
+          <TabsList className="h-auto w-full justify-start bg-transparent p-0 gap-1.5 flex-wrap">
+            {[
+              ['projects', 'FolderOpen', 'Проекты'],
+              ['gallery', 'Globe', 'Галерея'],
+              ['wallet', 'Wallet', 'Кошелёк'],
+              ['purchases', 'ShoppingBag', 'Покупки'],
+              ['media', 'Image', `Медиа · ${mediaFiles.length}`],
+              ['profile', 'User', 'Профиль'],
+            ].map(([value, icon, label], i) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="h-9 px-3 rounded border border-lp-line bg-transparent font-mono text-[11px] uppercase tracking-wider text-lp-dim hover:text-lp-text data-[state=active]:bg-lp-amber data-[state=active]:border-lp-amber data-[state=active]:text-lp-ink data-[state=active]:shadow-none"
+              >
+                <span className="mr-2 opacity-60 tabular-nums">R{String(i + 1).padStart(2, '0')}</span>
+                <Icon name={icon} size={12} className="mr-1.5" />
+                {label}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           <TabsContent value="projects">
             <div className="editor-panel rounded-xl p-4">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold flex items-center gap-2">
+                <h2 className="font-display font-bold uppercase text-sm tracking-tight flex items-center gap-2">
                   <Icon name="FolderOpen" size={16} /> Мои проекты
                 </h2>
                 <button onClick={handleCreateProject} className="nle-button active flex items-center gap-1.5">
@@ -449,7 +482,7 @@ const Dashboard = () => {
           <TabsContent value="gallery">
             <div className="editor-panel rounded-xl p-4">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold flex items-center gap-2">
+                <h2 className="font-display font-bold uppercase text-sm tracking-tight flex items-center gap-2">
                   <Icon name="Globe" size={16} /> Публичные проекты
                 </h2>
                 <span className="text-xs text-muted-foreground">{publicProjects.length} проектов</span>
@@ -503,8 +536,8 @@ const Dashboard = () => {
           <TabsContent value="wallet">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
               <div className="editor-panel rounded-xl p-4">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Баланс</h3>
-                <div className="text-3xl font-bold text-green-400">{balance.toFixed(2)} ₽</div>
+                <h3 className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider mb-3">Баланс</h3>
+                <div className="font-display text-3xl font-bold text-green-400 tabular-nums">{balance.toFixed(2)} ₽</div>
                 <Separator className="my-4 bg-border/50" />
                 <h4 className="text-xs font-semibold text-muted-foreground mb-2">Пополнить</h4>
                 <div className="flex gap-2">
@@ -529,7 +562,7 @@ const Dashboard = () => {
               </div>
 
               <div className="lg:col-span-2 editor-panel rounded-xl p-4">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                <h3 className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider mb-3">
                   История транзакций
                 </h3>
                 <ScrollArea className="h-80 editor-scrollbar">
@@ -565,7 +598,7 @@ const Dashboard = () => {
 
           <TabsContent value="purchases">
             <div className="editor-panel rounded-xl p-4">
-              <h2 className="text-sm font-semibold flex items-center gap-2 mb-4">
+              <h2 className="font-display font-bold uppercase text-sm tracking-tight flex items-center gap-2 mb-4">
                 <Icon name="ShoppingBag" size={16} /> Мои покупки
               </h2>
               {purchases.length === 0 ? (
@@ -598,7 +631,7 @@ const Dashboard = () => {
           <TabsContent value="media">
             <div className="editor-panel rounded-xl p-4">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold flex items-center gap-2">
+                <h2 className="font-display font-bold uppercase text-sm tracking-tight flex items-center gap-2">
                   <Icon name="Image" size={16} /> Все загруженные файлы
                 </h2>
                 <div className="flex items-center gap-2">
@@ -654,7 +687,7 @@ const Dashboard = () => {
 
           <TabsContent value="profile">
             <div className="max-w-lg editor-panel rounded-xl p-6">
-              <h2 className="text-sm font-semibold flex items-center gap-2 mb-4">
+              <h2 className="font-display font-bold uppercase text-sm tracking-tight flex items-center gap-2 mb-4">
                 <Icon name="User" size={16} /> Настройки профиля
               </h2>
               <div className="flex items-center gap-4 mb-6">
