@@ -48,10 +48,10 @@ const tasks = [
 const LandingFeatures = () => (
   <section id="tasks" className="relative py-20 sm:py-28 px-4 sm:px-6 scroll-mt-16">
     <div className="max-w-7xl mx-auto">
-      <div className="grid lg:grid-cols-[320px_1fr] gap-10 lg:gap-16">
-        <div className="lg:sticky lg:top-28 self-start">
+      <div className="grid lg:grid-cols-[minmax(0,360px)_1fr] gap-10 lg:gap-16">
+        <div className="lg:sticky lg:top-28 self-start min-w-0">
           <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-lp-amber">Сцена 01</div>
-          <h2 className="mt-4 font-display font-black uppercase text-4xl sm:text-5xl leading-[0.95] tracking-tight">
+          <h2 className="mt-4 font-display font-black uppercase text-[8.5vw] sm:text-5xl lg:text-[2.15rem] xl:text-[2.3rem] leading-[0.95] tracking-tight whitespace-nowrap">
             Монтажный
             <br />
             лист
@@ -70,7 +70,7 @@ const LandingFeatures = () => (
           {tasks.map((t, i) => (
             <li
               key={t.tc}
-              className="group grid grid-cols-[auto_1fr] sm:grid-cols-[96px_1fr_auto] gap-x-5 gap-y-2 py-6 sm:py-7 border-b border-lp-line hover:bg-lp-panel/70 transition-colors px-2 sm:px-4 -mx-2 sm:-mx-4"
+              className="group grid grid-cols-[auto_1fr] sm:grid-cols-[96px_1fr_auto] gap-x-5 gap-y-2 py-6 sm:py-7 border-b border-lp-line hover:bg-lp-panel/70 transition-colors px-2 sm:px-4"
             >
               <div className="font-mono text-xs text-lp-dim tabular-nums pt-1 group-hover:text-lp-amber transition-colors">
                 <span className="block text-[10px] opacity-60">#{String(i + 1).padStart(2, '0')}</span>

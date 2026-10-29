@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom';
 import Icon from '@/components/ui/icon';
 import useAuth from '@/hooks/use-auth';
-
-const HERO_IMG = 'https://cdn.poehali.dev/projects/238a5289-75c3-4972-a2c7-31a94579110e/files/3616a302-8889-4f78-bd5b-b269ff0394c8.jpg';
+import HeroEditorMock from './HeroEditorMock';
 
 const Corner = ({ className }: { className: string }) => (
   <span className={`absolute w-6 h-6 border-lp-text/80 ${className}`} />
@@ -21,7 +20,7 @@ const LandingHero = () => {
             <span>Сцена: «Ролик за вечер»</span>
           </div>
 
-          <h1 className="mt-6 font-display font-black uppercase leading-[0.95] tracking-tight text-[10.5vw] sm:text-6xl xl:text-[5.4rem]">
+          <h1 className="mt-6 font-hero uppercase leading-[1] tracking-tight text-[10vw] sm:text-6xl xl:text-[5.2rem]">
             Снято.
             <br />
             <span className="text-lp-amber">Смонтируй</span>
@@ -32,10 +31,23 @@ const LandingHero = () => {
             </span>
           </h1>
 
-          <p className="mt-7 max-w-md text-base sm:text-lg text-lp-dim leading-relaxed">
-            Отрежь скучную заставку, поставь свои титры, получи субтитры за минуту и
-            выгрузи ролик под любую площадку. Прямо во вкладке браузера.
+          <p className="mt-7 max-w-lg text-base sm:text-lg text-lp-text/85 leading-relaxed">
+            VideoForge — видеоредактор, который открывается во вкладке браузера. Без
+            установки, без мощного компьютера и без курсов по монтажу.
           </p>
+          <ul className="mt-5 max-w-lg space-y-2.5 text-sm sm:text-[15px] text-lp-dim">
+            {[
+              'Отрежь чужую заставку и лишний хвост с точностью до кадра',
+              'Поставь свой логотип, титры и подписи спикеров',
+              'Получи субтитры по словам автоматически из речи',
+              'Выгрузи ролик под сторис, YouTube или сайт — до 4K',
+            ].map(item => (
+              <li key={item} className="flex gap-2.5">
+                <span className="mt-[9px] w-3 h-px bg-lp-amber shrink-0" />
+                <span className="leading-relaxed">{item}</span>
+              </li>
+            ))}
+          </ul>
 
           <div className="mt-9 flex flex-col sm:flex-row gap-3">
             <Link
@@ -71,41 +83,15 @@ const LandingHero = () => {
         </div>
 
         <div className="relative animate-fade-up" style={{ animationDelay: '0.15s' }}>
-          <div className="relative aspect-[4/5] sm:aspect-[5/6] rounded-lg overflow-hidden border border-lp-line bg-lp-panel">
-            <img src={HERO_IMG} alt="Монтаж ролика в VideoForge" className="absolute inset-0 w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-lp-ink/80 via-transparent to-lp-ink/40" />
-
-            <Corner className="top-4 left-4 border-t-2 border-l-2" />
-            <Corner className="top-4 right-4 border-t-2 border-r-2" />
-            <Corner className="bottom-4 left-4 border-b-2 border-l-2" />
-            <Corner className="bottom-4 right-4 border-b-2 border-r-2" />
-
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10">
-              <span className="absolute top-1/2 inset-x-0 h-px bg-lp-text/60" />
-              <span className="absolute left-1/2 inset-y-0 w-px bg-lp-text/60" />
-            </div>
-
-            <div className="absolute top-7 left-8 right-8 flex items-center justify-between font-mono text-[11px] text-lp-text">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-lp-rec lp-rec-blink" /> REC
-              </span>
-              <span className="tabular-nums">00:01:27:14</span>
-            </div>
-
-            <div className="absolute bottom-7 left-8 right-8 flex items-end justify-between font-mono text-[10px] text-lp-text/85 uppercase tracking-wider">
-              <div className="space-y-1">
-                <div>ISO 800 · F2.8</div>
-                <div>1/50 · 25P</div>
-              </div>
-              <div className="flex items-end gap-[3px] h-8">
-                {[40, 70, 55, 90, 65, 80, 45, 60].map((h, i) => (
-                  <span key={i} className={`w-[3px] ${h > 75 ? 'bg-lp-rec' : 'bg-lp-green'}`} style={{ height: `${h}%` }} />
-                ))}
-              </div>
-            </div>
+          <div className="relative p-3 sm:p-5">
+            <Corner className="top-0 left-0 border-t-2 border-l-2" />
+            <Corner className="top-0 right-0 border-t-2 border-r-2" />
+            <Corner className="bottom-0 left-0 border-b-2 border-l-2" />
+            <Corner className="bottom-0 right-0 border-b-2 border-r-2" />
+            <HeroEditorMock />
           </div>
 
-          <div className="absolute -left-4 sm:-left-8 bottom-16 rotate-[-4deg] bg-lp-text text-lp-ink rounded-sm px-4 py-3 shadow-2xl max-w-[220px]">
+          <div className="hidden sm:block absolute -left-8 -bottom-20 rotate-[-4deg] bg-lp-text text-lp-ink rounded-sm px-4 py-3 shadow-2xl max-w-[220px]">
             <div className="font-mono text-[10px] uppercase tracking-wider opacity-60">Заметка монтажёра</div>
             <div className="mt-1 font-display font-bold text-sm leading-snug">Заставку 0:00–0:07 — в корзину</div>
           </div>
