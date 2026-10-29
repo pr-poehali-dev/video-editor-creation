@@ -6,6 +6,7 @@ import { shop, wallet } from '@/lib/api';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Input } from '@/components/ui/input';
+import useLpTheme from '@/hooks/use-lp-theme';
 
 interface ShopItem {
   id: number;
@@ -49,12 +50,12 @@ const categoryIcons: Record<string, string> = {
 };
 
 const categoryColors: Record<string, string> = {
-  transitions: 'from-purple-500/20 to-blue-500/20',
-  titles: 'from-cyan-500/20 to-teal-500/20',
-  effects: 'from-orange-500/20 to-red-500/20',
-  audio: 'from-green-500/20 to-emerald-500/20',
-  templates: 'from-pink-500/20 to-rose-500/20',
-  features: 'from-yellow-500/20 to-amber-500/20',
+  transitions: 'bg-lp-cyan',
+  titles: 'bg-lp-amber',
+  effects: 'bg-lp-rec',
+  audio: 'bg-lp-green',
+  templates: 'bg-lp-text',
+  features: 'bg-lp-amber',
 };
 
 const Shop = () => {
@@ -72,6 +73,7 @@ const Shop = () => {
   const [promoResult, setPromoResult] = useState<PromoResult | null>(null);
   const [promoError, setPromoError] = useState('');
   const [checkingPromo, setCheckingPromo] = useState(false);
+  useLpTheme();
 
   useEffect(() => {
     loadProfile();
@@ -148,38 +150,35 @@ const Shop = () => {
   };
 
   return (
-    <div className="min-h-screen" style={{ background: 'hsl(var(--editor-bg))' }}>
-      <header className="border-b border-border" style={{ background: 'hsl(var(--editor-panel))' }}>
-        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate('/')} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-                <Icon name="Film" size={16} className="text-primary" />
-              </div>
-              <span className="font-semibold text-sm">VideoForge</span>
+    <div className="lp lp-grain min-h-screen">
+      <header className="sticky top-0 z-40 border-b border-lp-line bg-lp-ink/85 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={() => navigate('/')} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity shrink-0">
+              <span className="w-8 h-8 rounded-md bg-lp-amber flex items-center justify-center">
+                <Icon name="Clapperboard" size={16} className="text-lp-ink" />
+              </span>
+              <span className="hidden sm:inline font-display font-bold text-[15px] tracking-tight">VideoForge</span>
             </button>
-            <Separator orientation="vertical" className="h-6 bg-border/50" />
-            <div className="flex items-center gap-1.5">
-              <Icon name="Store" size={14} className="text-accent" />
-              <span className="text-xs font-medium">Магазин</span>
-            </div>
+            <Separator orientation="vertical" className="hidden md:block h-6 bg-lp-line" />
+            <span className="hidden md:inline font-mono text-[11px] uppercase tracking-wider text-lp-dim">Реквизиторская</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {isAuthenticated && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ background: 'hsl(var(--editor-bg))' }}>
-                <Icon name="Wallet" size={14} className="text-green-400" />
-                <span className="text-sm font-semibold">{balance.toFixed(0)} ₽</span>
+              <div className="flex items-center gap-2 h-8 px-2.5 rounded border border-lp-line font-mono text-xs tabular-nums">
+                <Icon name="Wallet" size={13} className="text-lp-green" />
+                <span className="font-bold">{balance.toFixed(0)} ₽</span>
               </div>
             )}
-            <button onClick={() => navigate('/editor')} className="nle-button flex items-center gap-1.5">
-              <Icon name="Clapperboard" size={12} /> Редактор
+            <button onClick={() => navigate('/editor')} className="nle-button h-8 flex items-center gap-1.5">
+              <Icon name="Clapperboard" size={12} /> <span className="hidden sm:inline">Редактор</span>
             </button>
             {isAuthenticated ? (
-              <button onClick={() => navigate('/dashboard')} className="nle-button flex items-center gap-1.5">
-                <Icon name="User" size={12} /> Кабинет
+              <button onClick={() => navigate('/dashboard')} className="nle-button h-8 flex items-center gap-1.5">
+                <Icon name="User" size={12} /> <span className="hidden sm:inline">Кабинет</span>
               </button>
             ) : (
-              <button onClick={() => navigate('/auth')} className="nle-button active flex items-center gap-1.5">
+              <button onClick={() => navigate('/auth')} className="nle-button active h-8 flex items-center gap-1.5">
                 <Icon name="LogIn" size={12} /> Войти
               </button>
             )}
@@ -187,88 +186,103 @@ const Shop = () => {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-6">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold mb-2">Магазин VideoForge</h1>
-          <p className="text-sm text-muted-foreground">Эффекты, переходы, музыка и расширения для ваших проектов</p>
-        </div>
+      <main className="max-w-6xl mx-auto px-4 py-8 sm:py-10">
+        <section className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-lp-line">
+          <div>
+            <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-lp-amber">Реквизит для монтажа</div>
+            <h1 className="mt-4 font-hero uppercase text-4xl sm:text-6xl leading-[1] tracking-tight">
+              Магазин
+              <br />
+              <span className="text-lp-amber">эффектов</span>
+            </h1>
+          </div>
+          <p className="max-w-sm text-lp-dim leading-relaxed">
+            Переходы, титры, музыка и расширения. Купил — и они сразу появляются во вкладках редактора.
+          </p>
+        </section>
 
         {message && (
-          <div className={`mb-4 px-4 py-3 rounded-lg flex items-center gap-2 text-sm ${message.type === 'success' ? 'bg-green-500/10 text-green-400' : 'bg-destructive/10 text-destructive'}`}>
+          <div className={`mt-6 px-4 py-3 rounded border flex items-center gap-2 text-sm ${message.type === 'success' ? 'border-lp-green/40 bg-lp-green/10 text-lp-green' : 'border-lp-rec/40 bg-lp-rec/10 text-lp-rec'}`}>
             <Icon name={message.type === 'success' ? 'CheckCircle' : 'AlertCircle'} size={16} />
             {message.text}
             <button onClick={() => setMessage(null)} className="ml-auto"><Icon name="X" size={14} /></button>
           </div>
         )}
 
-        <div className="flex gap-2 mb-6 flex-wrap">
-          <button
-            onClick={() => setActiveCategory('')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${!activeCategory ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:text-foreground'}`}
-          >
-            Все
-          </button>
-          {categories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5 ${activeCategory === cat ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:text-foreground'}`}
-            >
-              <Icon name={categoryIcons[cat] || 'Package'} size={12} />
-              {categoryLabels[cat] || cat}
-            </button>
-          ))}
+        <div className="mt-6 mb-6 flex gap-1.5 flex-wrap">
+          {['', ...categories].map((cat, i) => {
+            const on = activeCategory === cat;
+            return (
+              <button
+                key={cat || 'all'}
+                onClick={() => setActiveCategory(cat)}
+                className={`h-9 px-3 rounded border font-mono text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-colors ${
+                  on ? 'bg-lp-amber border-lp-amber text-lp-ink' : 'border-lp-line text-lp-dim hover:text-lp-text'
+                }`}
+              >
+                <span className="opacity-60 tabular-nums">R{String(i + 1).padStart(2, '0')}</span>
+                {cat && <Icon name={categoryIcons[cat] || 'Package'} size={12} />}
+                {cat ? categoryLabels[cat] || cat : 'Все'}
+              </button>
+            );
+          })}
         </div>
 
         {loading ? (
-          <div className="text-center py-20">
-            <Icon name="Loader2" size={32} className="animate-spin text-primary mx-auto" />
+          <div className="py-20 flex flex-col items-center gap-3">
+            <Icon name="Loader2" size={28} className="animate-spin text-lp-amber" />
+            <span className="font-mono text-[11px] uppercase tracking-wider text-lp-dim">Достаём реквизит...</span>
           </div>
+        ) : filteredItems.length === 0 ? (
+          <div className="py-20 text-center font-mono text-xs uppercase tracking-wider text-lp-dim">В этой категории пока пусто</div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredItems.map(item => (
+            {filteredItems.map((item, i) => (
               <div
                 key={item.id}
-                className={`editor-panel rounded-xl overflow-hidden group cursor-pointer transition-all hover:ring-1 hover:ring-primary/40 ${item.owned ? 'ring-1 ring-green-500/30' : ''}`}
+                className={`group rounded-md border bg-lp-panel overflow-hidden cursor-pointer transition-colors ${item.owned ? 'border-lp-green/50' : 'border-lp-line hover:border-lp-amber'}`}
                 onClick={() => setSelectedItem(item)}
               >
-                <div className={`h-32 bg-gradient-to-br ${categoryColors[item.category] || 'from-gray-500/20 to-gray-600/20'} flex items-center justify-center relative`}>
-                  <div className="w-16 h-16 rounded-2xl bg-black/20 flex items-center justify-center backdrop-blur-sm">
-                    <Icon name={item.icon || 'Package'} size={28} className="text-white/80" />
-                  </div>
-                  {item.owned && (
-                    <div className="absolute top-2 right-2 bg-green-500 text-white text-[9px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <Icon name="Check" size={10} /> Куплено
+                <div className="relative h-32 bg-lp-ink overflow-hidden">
+                  <div className="absolute inset-0 hero-grid opacity-70" />
+                  <div className="absolute inset-x-0 top-0 h-2 lp-sprockets bg-lp-line" />
+                  <div className="absolute inset-x-0 bottom-0 h-2 lp-sprockets bg-lp-line" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className={`w-14 h-14 rounded-md ${categoryColors[item.category] || 'bg-lp-dim'} flex items-center justify-center group-hover:scale-105 transition-transform`}>
+                      <Icon name={item.icon || 'Package'} size={26} className="text-lp-ink" />
                     </div>
-                  )}
-                  <div className="absolute top-2 left-2">
-                    <span className="bg-black/40 text-white/80 text-[9px] font-medium px-2 py-0.5 rounded-full backdrop-blur-sm">
-                      {categoryLabels[item.category] || item.category}
-                    </span>
                   </div>
+                  <span className="absolute top-4 left-3 font-mono text-[10px] uppercase tracking-wider text-lp-dim">
+                    #{String(i + 1).padStart(2, '0')} · {categoryLabels[item.category] || item.category}
+                  </span>
+                  {item.owned && (
+                    <span className="absolute top-3.5 right-3 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-lp-green text-lp-ink font-mono text-[9px] font-bold uppercase">
+                      <Icon name="Check" size={10} /> В деле
+                    </span>
+                  )}
                 </div>
-                <div className="p-4">
-                  <h3 className="text-sm font-semibold mb-1">{item.name}</h3>
-                  <p className="text-[11px] text-muted-foreground line-clamp-2 mb-3">{item.description}</p>
-                  <div className="flex items-center justify-between">
+                <div className="p-4 border-t border-lp-line">
+                  <h3 className="font-display font-bold text-sm uppercase tracking-tight">{item.name}</h3>
+                  <p className="mt-1.5 text-xs text-lp-dim line-clamp-2 min-h-[2rem]">{item.description}</p>
+                  <div className="mt-4 flex items-center justify-between">
                     {item.owned ? (
-                      <span className="text-xs text-green-400 font-medium flex items-center gap-1">
+                      <span className="font-mono text-[11px] uppercase tracking-wider text-lp-green flex items-center gap-1">
                         <Icon name="CheckCircle" size={12} /> Установлено
                       </span>
                     ) : (
-                      <span className="text-lg font-bold">{item.price.toFixed(0)} ₽</span>
+                      <span className="font-display text-xl font-bold tabular-nums">{item.price.toFixed(0)} ₽</span>
                     )}
                     {item.owned ? (
                       <button
                         onClick={(e) => { e.stopPropagation(); navigate('/editor'); }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 text-green-400 hover:bg-green-500/20 transition-colors flex items-center gap-1"
+                        className="nle-button h-8 flex items-center gap-1.5"
                       >
-                        <Icon name="Clapperboard" size={10} /> Редактор
+                        <Icon name="Clapperboard" size={11} /> В редактор
                       </button>
                     ) : (
                       <button
                         onClick={(e) => { e.stopPropagation(); setSelectedItem(item); }}
-                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                        className="nle-button active h-8 px-4"
                       >
                         Купить
                       </button>
@@ -282,11 +296,13 @@ const Shop = () => {
       </main>
 
       {selectedItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setSelectedItem(null)}>
-          <div className="editor-panel rounded-2xl w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className={`h-40 bg-gradient-to-br ${categoryColors[selectedItem.category] || 'from-gray-500/20 to-gray-600/20'} flex items-center justify-center relative`}>
-              <div className="w-20 h-20 rounded-2xl bg-black/20 flex items-center justify-center backdrop-blur-sm">
-                <Icon name={selectedItem.icon || 'Package'} size={36} className="text-white/80" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setSelectedItem(null)}>
+          <div className="rounded-md border-2 border-lp-text bg-lp-panel w-full max-w-lg overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="h-6 lp-clapper-stripes border-b-2 border-lp-text" />
+            <div className="h-36 bg-lp-ink flex items-center justify-center relative overflow-hidden">
+              <div className="absolute inset-0 hero-grid opacity-70" />
+              <div className={`relative w-20 h-20 rounded-md ${categoryColors[selectedItem.category] || 'bg-lp-dim'} flex items-center justify-center`}>
+                <Icon name={selectedItem.icon || 'Package'} size={36} className="text-lp-ink" />
               </div>
               <button onClick={() => setSelectedItem(null)} className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 flex items-center justify-center hover:bg-black/60 transition-colors">
                 <Icon name="X" size={16} className="text-white" />

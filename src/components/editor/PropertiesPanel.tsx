@@ -363,7 +363,7 @@ const PropertiesPanel = () => {
                 <div className="flex items-center justify-between pt-1">
                   <div className="flex items-center gap-1.5">
                     <Icon name="Stamp" size={11} className="text-muted-foreground" />
-                    <Label className="text-[10px] text-muted-foreground">Эмблема (водяной знак)</Label>
+                    <Label className="text-[10px] text-muted-foreground">Логотип поверх видео</Label>
                   </div>
                   <button
                     onClick={() => updateClip(selectedClip.id, { isBackground: !selectedClip.isBackground })}
@@ -376,7 +376,7 @@ const PropertiesPanel = () => {
                 {selectedClip.isBackground && (
                   <div className="space-y-2 pt-1 pl-1 border-l-2 border-primary/30 ml-1">
                     <div>
-                      <Label className="text-[10px] text-muted-foreground mb-1.5 block">Позиция</Label>
+                      <Label className="text-[10px] text-muted-foreground mb-1.5 block">Угол кадра</Label>
                       <div className="grid grid-cols-3 gap-1 w-[90px]">
                         {(['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right'] as const).map(anchor => {
                           const current = selectedClip.bgAnchor || 'bottom-right';

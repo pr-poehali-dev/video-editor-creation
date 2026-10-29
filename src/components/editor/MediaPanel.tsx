@@ -376,10 +376,10 @@ const MediaPanel = () => {
 
     if (isDemo) {
       toast('Файл добавлен локально. Загрузка на сервер недоступна в демо-версии.');
-      return;
+      return asset;
     }
 
-    if (!isAuthenticated) return;
+    if (!isAuthenticated) return asset;
 
     let uploadTarget = file;
 
@@ -413,7 +413,7 @@ const MediaPanel = () => {
         retrying: false,
         oversized: true,
       }]);
-      return;
+      return asset;
     }
 
     if (uploadTarget.size > DIRECT_UPLOAD_LIMIT) {
@@ -421,7 +421,43 @@ const MediaPanel = () => {
     } else {
       doUpload(uploadTarget, asset.id, duration, 1);
     }
+    return asset;
   }, [addAsset, isAuthenticated, isDemo, doUpload, doChunkedUpload]);
+
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Для логотипа нужна картинка: PNG, SVG, JPG или WebP');
+      return;
+    }
+    const asset = await uploadFile(file);
+    if (!asset) return;
+    const state = useEditorStore.getState();
+    const videoEnd = state.tracks.reduce((max, t) => Math.max(max, ...t.clips.map(c => c.startTime + c.duration)), 0);
+    const duration = Math.max(5, videoEnd);
+    const trackId = state.addTrack('video');
+    state.addClip(trackId, {
+      assetId: asset.id,
+      type: 'image',
+      startTime: 0,
+      duration,
+      name: `Логотип · ${file.name}`,
+      isBackground: true,
+      bgAnchor: 'top-right',
+      bgScale: 15,
+      bgMargin: 4,
+      bgOpacity: 0.9,
+      fitMode: 'contain',
+    });
+    const added = useEditorStore.getState().tracks.find(t => t.id === trackId)?.clips[0];
+    if (added) state.selectClip(added.id);
+    setActivePanel('properties');
+    toast.success('Логотип добавлен на всё видео — настройте угол, размер и прозрачность справа');
+  }, [uploadFile, setActivePanel]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -748,6 +784,10 @@ const MediaPanel = () => {
                     <Icon name="HardDrive" size={14} />
                     <span>С компьютера</span>
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => logoInputRef.current?.click()} className="gap-2 cursor-pointer">
+                    <Icon name="Stamp" size={14} />
+                    <span>Свой логотип поверх видео</span>
+                  </DropdownMenuItem>
                   {isAuthenticated && (
                     <DropdownMenuItem onClick={handleOpenLibrary} className="gap-2 cursor-pointer">
                       <Icon name="Cloud" size={14} />
@@ -758,6 +798,14 @@ const MediaPanel = () => {
               </DropdownMenu>
             )}
             <input ref={fileInputRef} type="file" accept="video/*,audio/*,image/*" multiple onChange={handleFileChange} className="hidden" />
+            <input ref={logoInputRef} type="file" accept="image/png,image/svg+xml,image/webp,image/jpeg" onChange={handleLogoFile} className="hidden" />
+            <button
+              onClick={() => logoInputRef.current?.click()}
+              className="mt-1.5 w-full flex items-center justify-center gap-1.5 nle-button py-1.5"
+            >
+              <Icon name="Stamp" size={12} />
+              <span>Добавить свой логотип</span>
+            </button>
           </div>
           {uploadErrors.length > 0 && (
             <div className="px-2 pb-1 space-y-1">

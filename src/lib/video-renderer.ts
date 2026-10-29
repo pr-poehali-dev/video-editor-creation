@@ -7,6 +7,12 @@ import { media as mediaApi } from "@/lib/api";
 import { ensureFontLoaded, waitForFontStylesheet } from "@/lib/google-fonts";
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
+import { VideoFrameSource } from "@/lib/video-frame-source";
+
+type DrawSource = HTMLImageElement | HTMLVideoElement;
+
+const sourceSize = (src: DrawSource): [number, number] =>
+  src instanceof HTMLVideoElement ? [src.videoWidth || 1, src.videoHeight || 1] : [src.naturalWidth || 1, src.naturalHeight || 1];
 
 type ProgressCallback = (progress: number, stage: string) => void;
 
@@ -54,6 +60,7 @@ interface ClipTransition {
 }
 
 interface ClipInfo {
+  key: string;
   assetId?: string;
   type: string;
   startTime: number;
@@ -107,6 +114,8 @@ export class VideoRenderer {
   private assetDetails: AssetLoadDetail[] = [];
   private onAssetDetail?: AssetDetailCallback;
   private wrapCache = new Map<string, string[]>();
+  private frames: VideoFrameSource | null = null;
+  private videoClips: ClipInfo[] = [];
 
   async init(): Promise<void> {
     this.cancelled = false;
@@ -114,6 +123,24 @@ export class VideoRenderer {
   }
 
   async render(
+    tracks: Track[],
+    assets: MediaAsset[],
+    exportSettings: ExportSettings,
+    onProgress?: ProgressCallback,
+    onAssetDetail?: AssetDetailCallback
+  ): Promise<RenderResult> {
+    this.frames = new VideoFrameSource();
+    this.videoClips = [];
+    try {
+      return await this.renderInternal(tracks, assets, exportSettings, onProgress, onAssetDetail);
+    } finally {
+      this.frames?.dispose();
+      this.frames = null;
+      this.videoClips = [];
+    }
+  }
+
+  private async renderInternal(
     tracks: Track[],
     assets: MediaAsset[],
     exportSettings: ExportSettings,
@@ -205,6 +232,22 @@ export class VideoRenderer {
 
       const urlsToTry = this.getUrlsToTry(assetId, asset.url);
 
+      if (asset.type === "video" && this.frames) {
+        const ok = await this.frames.loadAsset(assetId, asset, (sid) => this.fetchChunked(sid, 'VideoFrames'));
+        if (ok) {
+          const detail = assetDetails.find(d => d.id === assetId);
+          if (detail) {
+            detail.status = 'done';
+            detail.progress = 100;
+            onAssetDetail?.([...assetDetails]);
+          }
+          console.log(`[Render] Video frames ready: ${asset.name}`);
+          loadedCount++;
+          continue;
+        }
+        console.warn(`[Render] Video frames unavailable, using poster: ${asset.name}`);
+      }
+
       if (asset.type === "image" || asset.type === "video") {
         let loaded = false;
         const isServer = assetId.startsWith("server_");
@@ -261,6 +304,11 @@ export class VideoRenderer {
     if (failedImages.length > 0) {
       onAssetDetail?.([...assetDetails]);
       throw new Error(`Не удалось загрузить ${failedImages.length} изображений: ${failedImages.map(d => d.name).join(', ')}`);
+    }
+
+    if (this.frames) {
+      this.videoClips = clips.filter(c => c.type === "video" && c.assetId && !imageCache.has(c.assetId));
+      await this.frames.prepareClips(this.videoClips);
     }
 
     report(0.2, "Подготовка аудио");
@@ -348,6 +396,7 @@ export class VideoRenderer {
         report(progress, "Рендеринг GIF");
       }
 
+      await this.frames?.seekAll(this.videoClips, currentTime);
       this.renderFrameToCanvas(ctx, canvas, clips, imageCache, currentTime, width, height);
 
       const imageData = ctx.getImageData(0, 0, width, height);
@@ -568,6 +617,7 @@ export class VideoRenderer {
         }
       }
 
+      await this.frames?.seekAll(this.videoClips, currentTime);
       this.renderFrameToCanvas(ctx, canvas, clips, imageCache, currentTime, width, height);
 
       const videoFrame = new VideoFrame(canvas, {
@@ -792,7 +842,7 @@ export class VideoRenderer {
       }
 
       if ((clip.type === "image" || clip.type === "video") && clip.assetId) {
-        const img = imageCache.get(clip.assetId);
+        const img: DrawSource | undefined = (clip.type === "video" ? this.frames?.get(clip.key) : undefined) ?? imageCache.get(clip.assetId);
         if (img) {
           ctx.save();
           ctx.globalAlpha = fadeAlpha;
@@ -1134,6 +1184,7 @@ export class VideoRenderer {
         report(progress, "Рендеринг видео");
       }
 
+      this.frames?.syncPlayback(this.videoClips, currentTime);
       this.renderFrameToCanvas(ctx, canvas, clips, imageCache, currentTime, width, height);
 
       const targetTime = renderStartTime + frame * frameDurationMs;
@@ -1144,6 +1195,7 @@ export class VideoRenderer {
       }
     }
 
+    this.frames?.pauseAll();
     report(0.92, "Завершение записи");
 
     scheduledSources.forEach(s => { try { s.stop(); } catch (_e) { /* stopped */ } });
@@ -1172,6 +1224,7 @@ export class VideoRenderer {
 
   terminate(): void {
     this.cancelled = true;
+    this.frames?.pauseAll();
     this.canvas = null;
     this.ctx = null;
   }
@@ -1214,6 +1267,7 @@ export class VideoRenderer {
       if (!track.visible && track.type !== "audio") continue;
       for (const clip of track.clips) {
         result.push({
+          key: `${tIdx}_${clip.id}`,
           assetId: clip.assetId,
           type: clip.type || track.type,
           startTime: clip.startTime,
@@ -1561,7 +1615,7 @@ export class VideoRenderer {
   }
 
   private drawImageWithTransform(
-    img: HTMLImageElement,
+    img: DrawSource,
     canvasW: number,
     canvasH: number,
     clip: ClipInfo,
@@ -1573,7 +1627,8 @@ export class VideoRenderer {
       return;
     }
 
-    const imgRatio = img.naturalWidth / img.naturalHeight;
+    const [srcW, srcH] = sourceSize(img);
+    const imgRatio = srcW / srcH;
     const canvasRatio = canvasW / canvasH;
     let drawW: number, drawH: number, drawX: number, drawY: number;
 
@@ -1621,7 +1676,7 @@ export class VideoRenderer {
   }
 
   private drawEmblem(
-    img: HTMLImageElement,
+    img: DrawSource,
     canvasW: number,
     canvasH: number,
     clip: ClipInfo,
@@ -1630,7 +1685,8 @@ export class VideoRenderer {
     const anchor = clip.bgAnchor || 'bottom-right';
     const scalePct = clip.bgScale / 100;
     const marginPct = clip.bgMargin / 100;
-    const imgRatio = img.naturalWidth / img.naturalHeight;
+    const [srcW, srcH] = sourceSize(img);
+    const imgRatio = srcW / srcH;
 
     const boxW = canvasW * scalePct;
     const boxH = canvasH * scalePct;
